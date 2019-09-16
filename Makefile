@@ -9,7 +9,7 @@ INCLUDES = -Irapidjson/include -Iecc
 
 LIBS = -lzmq -lpthread  -lm  -static
 
-HEADERS = log.h hmac.h sha2.h msg.h defs.h linkedlist.h
+HEADERS = log.h hmac.h sha2.h msg.h defs.h linkedlist.h khash.h
 
 OBJS = log.o hmac.o sha2.o msg.o linkedlist.o
 
