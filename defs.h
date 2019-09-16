@@ -24,7 +24,7 @@
 #include "rapidjson/writer.h"
 #include "rapidjson/filereadstream.h"
 #include "rapidjson/stringbuffer.h"
-#include "hmac_sha2.h"
+#include "hmac.h"
 #include "ecc/uECC.h"
 #include "khash.h"
 #include "log.h"
