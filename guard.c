@@ -8,8 +8,6 @@ using namespace std;
 
 
 
-static char_t* TEST_IDS[] = {"guard1", "guard2", "guard3", "guard4", "guard5"};
-
 pthread_mutex_t lock_x;
 
 //name of the hash table
@@ -42,7 +40,6 @@ static int prev_cnt = 0;
 
 static int ior = 0;
 static int netr = 0;
-static char self_policy[65535];
 
 static list_node* ptr_curr_state;
 static list_node* ptr_list_head;
@@ -51,7 +48,8 @@ const struct uECC_Curve_t* curve = uECC_secp256r1();
 
 char* get_func_name(){
 #ifdef DEBUG
-	return "test0";
+	char* out = "test0";
+	return out;
 #else
 	return getenv("AWS_LAMBDA_FUNCTION_NAME");
 #endif
@@ -59,22 +57,60 @@ char* get_func_name(){
 
 char* get_region_name(){
 #ifdef DEBUG
-	return "AWS_EAST";
+	char* out = "AWS_EAST";
+	return out;
 #else
 	return getenv("AWS_REGION");
 #endif
 }
 
-void split_by_slash(char* meta, char* info[]){
+void split_str(char* str, const char* sep, char* out[]){
 	int i = 0;
-	char *p = strtok (meta, "/");
+	char *p = strtok (str, sep);
 	while (p != NULL)
 	{
-	    info[i++] = p;
-	    p = strtok (NULL, "/");
+	    out[i++] = p;
+	    p = strtok (NULL, sep);
 	}
 
 }
+
+
+char* rand_string(char *str, size_t size)
+{
+	srand ( time(NULL) );
+    const char charset[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJK1234567890";
+    if (size) {
+        --size;
+        for (size_t n = 0; n < size; n++) {
+            int key = rand() % (int) (sizeof charset - 1);
+            str[n] = charset[key];
+        }
+        str[size] = '\0';
+    }
+    return str;
+}
+
+
+
+void strip(char* str, char c) {
+    char *pr = str, *pw = str;
+    while (*pr) {
+        *pw = *pr++;
+        pw += (*pw != c);
+    }
+    *pw = '\0';
+}
+
+
+bool starts_with(char *str, char *pre)
+{
+    size_t lenpre = strlen(pre),
+           lenstr = strlen(str);
+    return lenstr < lenpre ? false : strncmp(pre, str, lenpre) == 0;
+}
+
+
 
 void get_inst_id(char* inst_id){
 
@@ -96,7 +132,8 @@ void get_inst_id(char* inst_id){
         linecnt += 1;
         if (linecnt != 8) continue;
         char* ids[3];
-        split_by_slash(line, ids);
+        const char* sep = "/";
+        split_str(line, sep, ids);
         strncpy(inst_id, ids[2], 14);
         inst_id[14] = '\0';
     }
@@ -435,69 +472,6 @@ void policy_init_handler(char* msg_body, int msg_body_len)
 }
 
 
-void state_init(void* ptr)
-{	
-
-	khash_t(state_table)* h = (khash_t(state_table)*) ptr_state_table;
-
-
-	for (int i=0; i < prev_cnt; i++)
-	{	
-
-		char* key = (char*) calloc(64, sizeof(char));
-		memcpy(key, (char*)prev_key[i].key_pub, 64);
-		kh_set(state_table, h, key, STATE_REQ_RECIVED);
-
-		// printf ("key %d\n", strlen(key));
-
-		// free(key);
-	}
-
-}
-
-
-void state_update(char* key, int val)
-{
-
-	khash_t(state_table)* h = (khash_t(state_table)*) ptr_state_table;
-	char* k1 = (char*) calloc(64, sizeof(char));
-	memcpy(k1, (char*)key, 64);
-	kh_set(state_table, h, k1, val);
-	free(k1);
-
-}
-
-
-void* state_check(void* ptr)
-{
-
-	// para_state_check_t* passed_args = (para_state_check_t*) args;
-
-	khash_t(state_table)* h = (khash_t(state_table)*) ptr_state_table;
-
-	for (int i = 0; i < prev_cnt; i++)
-	{
-		char* key = (char*) calloc(64, sizeof(char));
-		memcpy(key, (char*)prev_key[i].key_pub, 64);
-
-
-		int ret = kh_get_val(state_table, h, key);
-		//printf ("%d, %d\n", strlen(key), ret);
-
-		free(key);
-	}
-
-
-	printf("check key %d\n", lookup(io_whitelist, "aaa"));
-	printf("check key %d\n", lookup(io_whitelist, "/tmp/*"));
-	printf("check key %d\n", lookup(io_whitelist, "NO"));
-	printf("check key %d\n", lookup(url_whitelist, "http://www.wisc.edu"));
-	printf("check key %d\n", lookup(url_whitelist, "http://www.wisc1.edu"));
-	// printf("%d, %d\n", netr, ior);
-
-	// printf("%p\n", (void*) h);
-}
-
 
 void* disk_monitor(void* context)
 {
@@ -624,41 +598,6 @@ void* disk_monitor(void* context)
 
 }
 
-static char *rand_string(char *str, size_t size)
-{
-	srand ( time(NULL) );
-    const char charset[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJK1234567890";
-    if (size) {
-        --size;
-        for (size_t n = 0; n < size; n++) {
-            int key = rand() % (int) (sizeof charset - 1);
-            str[n] = charset[key];
-        }
-        str[size] = '\0';
-    }
-    return str;
-}
-
-void split_meta(char* meta, char* info[]){
-	int i = 0;
-	char *p = strtok (meta, ":");
-	while (p != NULL)
-	{
-	    info[i++] = p;
-	    p = strtok (NULL, ":");
-	}
-
-}
-
-
-
-
-bool starts_with(char *str, char *pre)
-{
-    size_t lenpre = strlen(pre),
-           lenstr = strlen(str);
-    return lenstr < lenpre ? false : strncmp(pre, str, lenpre) == 0;
-}
 
 
 
@@ -702,7 +641,6 @@ bool check_policy(int event_id){
 
 	if ((nptr->ctr > 0) && (nptr->id == event_id)) {
 		nptr->ctr -= 1;
-		log_info("1");
 		return true;
 	}
 	
@@ -713,53 +651,15 @@ bool check_policy(int event_id){
 		if ((next_d_ptr->ctr > 0) && (next_d_ptr->id == event_id)) {
 			next_d_ptr->ctr -= 1;
 			ptr_curr_state = next_ptr;
-			log_info("2");
 			return true;
 		}
 	}
-
-	log_info("check");
 
 	return false;
 }
 
 
-int check_dep_policy(char* func_name, char* event, char* url){
-	// return true;
-	khiter_t k =  kh_get(policy_table, ptr_policy_table, func_name);
-	int is_missing = (k == kh_end(ptr_policy_table));
-	printf("%d\n", is_missing);
-	if (!is_missing) {
 
-		list* policy = kh_val(ptr_policy_table, k);
-		if (NULL == policy -> data) {
-			policy -> data = (void*) policy -> next;
-		}
-
-		list* cur_node = (list*) policy -> data;
-		event_t* e = (event_t*) cur_node->data;
-		printf("comp: %s, %s, %s, %s\n", e->ename, e->res, event, url);
-		if ((strcmp(e->ename, event) == 0) && (strcmp(e->res, url) == 0))
-		{
-			policy -> data = (list*) cur_node -> next;
-			return true;
-		}
-		policy -> data = NULL;
-		return true;
-		// return false;
-
-	}
-	return true;
-}
-
-void strip(char* str, char c) {
-    char *pr = str, *pw = str;
-    while (*pr) {
-        *pw = *pr++;
-        pw += (*pw != c);
-    }
-    *pw = '\0';
-}
 
 
 int main(int argc, char const *argv[])
@@ -807,16 +707,10 @@ int main(int argc, char const *argv[])
 	key_init_req(updater, guard_id);
 	log_info("register to ctr");
 
-	pthread_t th_disk_monitor;
-	pthread_t th_state;
-	pthread_t th_test;
+	// pthread_t th_disk_monitor;
+	// pthread_t th_state;
+	// pthread_t th_test;
 
-	long int st_time = 0;
-	long int ed_time = 0;
-
-	
-
-	int check_done = false;
 
 	while (1) {
 		zmq_poll (items, 3, -1);
@@ -824,12 +718,11 @@ int main(int argc, char const *argv[])
 		if (items [0].revents & ZMQ_POLLIN) {
 			
 			zmq_msg_t buf;
-			int rc;
 			int msg_size;
 
 			zmq_msg_init (&buf);
 
-			rc = zmq_msg_recv (&buf, updater, 0);
+			zmq_msg_recv (&buf, updater, 0);
 
 			msg_size = zmq_msg_size(&buf);
 
@@ -864,8 +757,8 @@ int main(int argc, char const *argv[])
 				
 				zmq_msg_t resp; 
 				printf("send check resp\n");
-				char* t = "ALLOW";
-				zmq_msg_init_data (&resp, t, strlen(t) , NULL, NULL);
+				char dec[] = "ALLOW"; /* weird issue: zmq_msg_init_data can't take macros as input */ 
+				zmq_msg_init_data (&resp, dec, strlen(dec) , NULL, NULL);
 				zmq_msg_send (&resp, listener, 0); 
 				zmq_msg_close(&resp);
 				
@@ -916,17 +809,15 @@ int main(int argc, char const *argv[])
 			}
 
     		if (!d.IsObject()){
-    			printf("receive no objects\n");
-    			char* t = "no object";
-    			meta = "no object";
-				zmq_msg_init_data (&resp, t, strlen(t) , NULL, NULL);
+    			log_error("message is not an valid json object!");
+    			char error_info[] = "no object";
+				zmq_msg_init_data (&resp, error_info, strlen(error_info) , NULL, NULL);
     			
  			}
  			else if (!d.HasMember("meta")){
- 				printf("receive no meta\n");
- 				char* t = "no meta";
- 				meta = "no meta";
-				zmq_msg_init_data (&resp, t, strlen(t) , NULL, NULL);
+ 				log_error("message does not has the meta field!");
+ 				char error_info[] = "no meta";
+				zmq_msg_init_data (&resp, error_info, strlen(error_info) , NULL, NULL);
  			}	
 
     		else {
@@ -938,6 +829,9 @@ int main(int argc, char const *argv[])
 				meta = (char*)calloc(strlen(meta_t.GetString()) + 1, sizeof(char));
 				strncpy(meta, meta_t.GetString(), strlen(meta_t.GetString()));
 
+				data = (char*)calloc(strlen(data_t.GetString()) + 1, sizeof(char));
+				strncpy(data, data_t.GetString(), strlen(data_t.GetString()));
+
 				char* out = (char*)calloc(strlen(meta) + strlen(guard_id) + strlen(event) + strlen(rid) + 4, sizeof(char));    
 				sprintf(out, "%s:%s:%s:%s", guard_id, event, meta, rid);
 
@@ -946,7 +840,7 @@ int main(int argc, char const *argv[])
 				* 4 --> has_body; 5 --> request id
 				*/
 				char* info[6];
-				split_meta(meta, info);
+				split_str(meta, ":", info);
 
 				unsigned ev_hash = 0; 
 				ev_hash = djb2hash(guard_id, event, info[0], info[1]);
@@ -1008,8 +902,8 @@ int main(int argc, char const *argv[])
 					// if (check_policy(info[0], info[1], info[2])) {
 					if (check_policy(ev_id)) {
 						
-						char* t = "ALLOW";
-						zmq_msg_init_data (&resp, t, strlen(t) , NULL, NULL); 
+						char dec[] = "ALLOW"; 
+						zmq_msg_init_data(&resp, dec, strlen(dec), NULL, NULL); 
 							// if (strstr(info[0], "google") != NULL) {
 							// 	char* t = "ALLOW";
 							// 	zmq_msg_init_data (&resp, t, strlen(t) , NULL, NULL); 
@@ -1027,15 +921,15 @@ int main(int argc, char const *argv[])
 					else{
 						log_info("2");
 						if (!data_t.IsObject()) {
-							char* t = "DENY";
+							char dec[] = "DENY";
 							// printf("ask for body\n");
-							zmq_msg_init_data (&resp, t, strlen(t) , NULL, NULL); 
+							zmq_msg_init_data(&resp, dec, strlen(dec) , NULL, NULL); 
 						}
 						else if (info[4] != 0) {
 							//printf("get all\n");
 							// char* t = "MORE";
-							char* t = "DENY";
-							zmq_msg_init_data (&resp, t, strlen(t) , NULL, NULL); 
+							char dec[] = "DENY";
+							zmq_msg_init_data(&resp, dec, strlen(dec) , NULL, NULL); 
 						}
 						else {
 							printf("!!!!!!!!\n");
@@ -1058,22 +952,17 @@ int main(int argc, char const *argv[])
 			zmq_msg_init_data (&msg0, msg_str, strlen(msg_str) , NULL, NULL); 
 			zmq_msg_send (&msg0, updater, 0); 
 			zmq_msg_close(&msg0); 
-		   
-
-		   	
-
-			free(meta);
 
 		}
 
 		if (items [2].revents & ZMQ_POLLIN) {
 
 			zmq_msg_t buf;
-			int rc, msg_size;
+			int msg_size;
 
 			zmq_msg_init (&buf);
 
-			rc = zmq_msg_recv (&buf, backend, 0);
+			zmq_msg_recv (&buf, backend, 0);
 
 			msg_size = zmq_msg_size(&buf);
 

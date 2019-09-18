@@ -327,13 +327,13 @@ void check_resp(void* context, char* res, msg_str_buff_t* msg_buff)
 }
 
 
-void split_meta(char* meta, char* info[]){
+void split_str(char* str, const char* sep, char* out[]){
 	int i = 0;
-	char *p = strtok (meta, ":");
+	char *p = strtok (str, sep);
 	while (p != NULL)
 	{
-		info[i++] = p;
-		p = strtok (NULL, ":");
+	    out[i++] = p;
+	    p = strtok (NULL, sep);
 	}
 
 }
@@ -575,7 +575,7 @@ static void * worker_routine (void *context)
 						char* info[9];
 
 						printf("!!!%s\n", recv_msg.body);
-						split_meta(recv_msg.body, info);
+						split_str(recv_msg.body, ":", info);
 						char* src = info[0];
 						char* event = info[1];
 						char* url = info[2];
@@ -622,7 +622,7 @@ static void * worker_routine (void *context)
 						char* info[9];
 
 						printf("aaa%s\n", recv_msg.body);
-						split_meta(recv_msg.body, info);
+						split_str(recv_msg.body, ":", info);
 						char* src = info[0];
 						char* event = info[1];
 						char* url = info[2];

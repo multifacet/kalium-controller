@@ -31,6 +31,8 @@
 
 #define DEBUG 1
 
+#define DENY "DENY"
+
 #define CTR_IP "127.0.0.1"
 // #define CTR_IP "18.217.190.226"
 #define GUARD_IP "127.0.0.1"
