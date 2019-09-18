@@ -323,7 +323,7 @@ void policy_init_req(void* socket, char* guard_id)
 
 	zmq_msg_t msg; 
 
-	int rc = zmq_msg_init_data (&msg, msg_str, strlen(msg_str) , my_free, NULL); 
+	int rc = zmq_msg_init_data(&msg, msg_str, strlen(msg_str), my_free, NULL); 
 
 	//printf ("Init guard policy\n");
 	zmq_msg_send (&msg, socket, 0); 
@@ -339,7 +339,7 @@ void info_init_req(void* socket, char* info)
 
 	zmq_msg_t msg; 
 
-	int rc = zmq_msg_init_data (&msg, msg_str, strlen(msg_str) , my_free, NULL); 
+	int rc = zmq_msg_init_data(&msg, msg_str, strlen(msg_str), my_free, NULL); 
 
 	//printf ("Init info req\n");
 	zmq_msg_send (&msg, socket, 0); 
