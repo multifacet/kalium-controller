@@ -7,8 +7,8 @@ import urllib2
 import subprocess
 import json
 import time
-import boto3
-import botocore
+# import boto3
+# import botocore
 from conf import *
 
 import os

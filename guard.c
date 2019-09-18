@@ -288,10 +288,10 @@ void key_init_req(void* socket, char* guard_id)
 	char* msg_str = msg_init(guard_id);
 	zmq_msg_t msg; 
 
-	int rc = zmq_msg_init_data (&msg, msg_str, strlen(msg_str) , my_free, NULL); 
+	int rc = zmq_msg_init_data(&msg, msg_str, strlen(msg_str) , my_free, NULL); 
 
 	//printf ("Init guard key\n");
-	zmq_msg_send (&msg, socket, 0); 
+	zmq_msg_send(&msg, socket, 0); 
 
 	zmq_msg_close(&msg);
 
@@ -315,37 +315,26 @@ void key_init_handler(char* msg_body, int msg_body_len)
 }
 
 
-
-void policy_init_req(void* socket, char* guard_id)
+void send_to_ctr(void* socket, char msg_type, char action, char* data)
 {
-
-	char* msg_str = msg_basic(TYPE_POLICY, ACTION_POLICY_INIT, guard_id, self_key);
-
-	zmq_msg_t msg; 
-
-	int rc = zmq_msg_init_data(&msg, msg_str, strlen(msg_str), my_free, NULL); 
-
-	//printf ("Init guard policy\n");
-	zmq_msg_send (&msg, socket, 0); 
-
+	zmq_msg_t msg;
+	char* msg_str = msg_basic(msg_type, action, data);
+	zmq_msg_init_data(&msg, msg_str, strlen(msg_str), NULL, NULL); 
+	zmq_msg_send(&msg, socket, 0); 
 	zmq_msg_close(&msg);
 }
 
 
-void info_init_req(void* socket, char* info)
+void send_to_client(void* socket, char* data)
 {
 
-	char* msg_str = msg_basic(TYPE_INFO, TYPE_INFO, info, self_key);
-
 	zmq_msg_t msg; 
-
-	int rc = zmq_msg_init_data(&msg, msg_str, strlen(msg_str), my_free, NULL); 
-
-	//printf ("Init info req\n");
-	zmq_msg_send (&msg, socket, 0); 
-
+	zmq_msg_init_data(&msg, data, strlen(data), NULL, NULL);
+	zmq_msg_send(&msg, socket, 0); 
 	zmq_msg_close(&msg);
 }
+
+
 
 
 void policy_init_handler(char* msg_body, int msg_body_len)
@@ -703,6 +692,7 @@ int main(int argc, char const *argv[])
 
 
 	key_init_req(updater, guard_id);
+
 	log_info("register to ctr");
 
 	// pthread_t th_disk_monitor;
@@ -734,7 +724,9 @@ int main(int argc, char const *argv[])
 			if (TYPE_KEY_DIST == type){
 				
 				key_init_handler(recv_msg.body, strtol(recv_msg.header.len, NULL, 16));
-				policy_init_req(updater, guard_id);
+
+				/* ask for policy*/
+				send_to_ctr(updater, TYPE_POLICY, ACTION_POLICY_INIT, guard_id); 
 
 
 			}
@@ -751,13 +743,9 @@ int main(int argc, char const *argv[])
 				
 			}
 			else if (TYPE_CHECK_RESP == type){
-				// printf("get ctr resp %s\n", recv_msg_copy.body);
 				
-				zmq_msg_t resp; 
 				log_info("get check resp %s", recv_msg.body);
-				zmq_msg_init_data (&resp, recv_msg.body, strlen(recv_msg.body) , NULL, NULL);
-				zmq_msg_send (&resp, listener, 0); 
-				zmq_msg_close(&resp);
+				send_to_client(listener, recv_msg.body);
 				
 			}
 
@@ -770,6 +758,7 @@ int main(int argc, char const *argv[])
 			int msg_size;
     		char* msg_str;
     		zmq_msg_t resp; 
+    		char* out;
 
 			zmq_msg_init (&buf);
 			zmq_msg_recv (&buf, listener, 0);
@@ -787,34 +776,31 @@ int main(int argc, char const *argv[])
 
 			
     		Document d;
-    		char* meta;
-    		char* data;
+    		char* meta = NULL;
+    		char* data = NULL;
     		d.Parse(body);
 
     		if (strncmp(EVENT_CHECK, event, EVENT_LEN) == 0) {
     			
-				zmq_msg_init_data (&resp, guard_id, strlen(guard_id) , NULL, NULL);
-				zmq_msg_send (&resp, listener, 0); 
-				zmq_msg_close(&resp);
+				send_to_client(listener, guard_id);
+				send_to_ctr(updater, TYPE_CHECK_STATUS, ACTION_NOOP, guard_id);
 				
-				msg_str = msg_basic_2(TYPE_CHECK_STATUS, ACTION_NOOP, guard_id, self_key);
-				zmq_msg_t msg0;
-				zmq_msg_init_data (&msg0, msg_str, strlen(msg_str) , NULL, NULL); 
-				zmq_msg_send (&msg0, updater, 0); 
-				zmq_msg_close(&msg0); 
 				continue;	
 			}
 
     		if (!d.IsObject()){
     			log_error("message is not an valid json object!");
     			char error_info[] = "no object";
-				zmq_msg_init_data (&resp, error_info, strlen(error_info) , NULL, NULL);
+    			send_to_client(listener, error_info);
+				// zmq_msg_init_data(&resp, error_info, strlen(error_info) , NULL, NULL);
     			
  			}
  			else if (!d.HasMember("meta")){
  				log_error("message does not has the meta field!");
  				char error_info[] = "no meta";
-				zmq_msg_init_data (&resp, error_info, strlen(error_info) , NULL, NULL);
+ 				send_to_client(listener, error_info);
+				// zmq_msg_init_data (&resp, error_info, strlen(error_info) , NULL, NULL);
+
  			}	
 
     		else {
@@ -826,7 +812,7 @@ int main(int argc, char const *argv[])
 				meta = (char*)calloc(strlen(meta_t.GetString()) + 1, sizeof(char));
 				strncpy(meta, meta_t.GetString(), strlen(meta_t.GetString()));
 
-				char* out = (char*)calloc(strlen(meta) + strlen(guard_id) + strlen(event) + strlen(rid) + 4, sizeof(char));    
+				out = (char*)calloc(strlen(meta) + strlen(guard_id) + strlen(event) + strlen(rid) + 4, sizeof(char));    
 				sprintf(out, "%s:%s:%s:%s", guard_id, event, meta, rid);
 				
 				/* 
@@ -845,57 +831,41 @@ int main(int argc, char const *argv[])
 
 				if (strncmp(EVENT_GET, event, EVENT_LEN) == 0){
 					
-
-					msg_str = msg_basic_2(TYPE_CHECK_EVENT, ACTION_NOOP, out, self_key);
-					zmq_msg_t msg0;
+					send_to_ctr(updater, TYPE_CHECK_EVENT, ACTION_NOOP, out);
 					
-					zmq_msg_init_data(&msg0, msg_str, strlen(msg_str) , NULL, NULL); 
-					
-					zmq_msg_send(&msg0, updater, 0); 
-
-					zmq_msg_close(&msg0); 
-
-					free(meta);
-
-					free(data);
-					
-					continue;
-					
-					
-
 				}
 
 				else if (strncmp(EVENT_END, event, EVENT_LEN) == 0){
 					policy_init();
-					msg_str = msg_basic_2(TYPE_EVENT, ACTION_NOOP, out, self_key);
+					send_to_client(listener, EMPTY);
+					send_to_ctr(updater, TYPE_EVENT, ACTION_NOOP, out);
+					
 				}
 
 				else if ((strncmp(EVENT_SEND, event, EVENT_LEN) == 0) || 
 					(strncmp(EVENT_RESP, event, EVENT_LEN) == 0)){
-				   	msg_str = msg_basic_2(TYPE_EVENT, ACTION_NOOP, out, self_key);
+				   
 					
-
 					if (check_policy(ev_id)) {
 						
 						char dec[] = "ALLOW"; 
-						zmq_msg_init_data(&resp, dec, strlen(dec), NULL, NULL); 
+						send_to_client(listener, dec);
+						send_to_ctr(updater, TYPE_EVENT, ACTION_NOOP, out); 
 					}
 					else {
 
 						char dec[] = "DENY";
-						zmq_msg_init_data(&resp, dec, strlen(dec) , NULL, NULL); 
+						send_to_client(listener, dec);
+						send_to_ctr(updater, TYPE_EVENT, ACTION_NOOP, out); 
 					}
 					
 				}
 
+				free(meta);
+				free(out); /* zmq might free this automatically, causing double free */
 			}
-			zmq_msg_send (&resp, listener, 0); 
-			zmq_msg_close(&resp);
-
-			zmq_msg_t msg0;
-			zmq_msg_init_data (&msg0, msg_str, strlen(msg_str) , NULL, NULL); 
-			zmq_msg_send (&msg0, updater, 0); 
-			zmq_msg_close(&msg0); 
+		
+			
 
 		}
 

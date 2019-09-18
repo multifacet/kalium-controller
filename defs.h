@@ -31,6 +31,8 @@
 
 #define DEBUG 1
 
+#define EMPTY ""
+
 #define DENY "DENY"
 
 #define CTR_IP "127.0.0.1"

@@ -77,7 +77,7 @@ void print_hex_len(char_t* str, int len)
 
 
 
-char_t* msg_init(char_t* guard_id)
+char* msg_init(char_t* guard_id)
 {
 
 	char_t* msg_body = guard_id;
@@ -98,8 +98,31 @@ char_t* msg_init(char_t* guard_id)
 }
 
 
+char* msg_basic(char type, char action, char* msg_body)
+{
 
-char_t* msg_basic(char_t type, char_t action, char_t* msg_body, keys_t keys)
+	unsigned char hash[SHA256_DIGEST_SIZE] = {0};
+    unsigned char sig[64] = {0};
+
+	int body_len = strlen(msg_body);
+	header_t h = init_msg_header(type, action, body_len);
+    char_t* t_hd_str = header_to_str(h);
+
+    int buf_size = MSG_HDR_LEN + MSG_SIG_LEN + body_len + 1;
+
+    char_t* buf = (char_t*) calloc (buf_size,  sizeof(char_t));
+    memset(buf, 0, buf_size);
+
+    memcpy(buf, t_hd_str, MSG_HDR_LEN);
+    memcpy(buf + MSG_HDR_LEN, msg_body, body_len);
+    memcpy(buf + MSG_HDR_LEN + body_len, hash, MSG_SIG_LEN);
+
+	return buf;
+
+}
+
+
+char* msg_basic2(char_t type, char_t action, char_t* msg_body, keys_t keys)
 {
 
 	int body_len = strlen(msg_body);
@@ -136,42 +159,6 @@ char_t* msg_basic(char_t type, char_t action, char_t* msg_body, keys_t keys)
 }
 
 
-char* msg_basic_2(char type, char action, char* msg_body, keys_t keys)
-{
-
-	int body_len = strlen(msg_body);
-	header_t h = init_msg_header(type, action, body_len);
-	
-	// unsigned char* key_priv = (unsigned char*) keys.key_priv;
-
-    unsigned char hash[SHA256_DIGEST_SIZE] = {0};
-    unsigned char sig[64] = {0};
-
-    // sha256((const unsigned char *) msg_body, strlen(msg_body), hash);
-
-
-    // const struct uECC_Curve_t* curve = uECC_secp256r1();
-
-    // if (!uECC_sign((unsigned char*) keys.key_priv, hash, sizeof(hash), sig, curve)) {
- 		 // printf("uECC_sign() failed\n");
-    //      exit(EXIT_FAILURE);   	
-    // }
-
-
-    char_t* t_hd_str = header_to_str(h);
-
-    int buf_size = MSG_HDR_LEN + MSG_SIG_LEN + body_len + 1;
-
-    char_t* buf = (char_t*) calloc (buf_size,  sizeof(char_t));
-    memset(buf, 0, buf_size);
-
-    memcpy(buf, t_hd_str, MSG_HDR_LEN);
-    memcpy(buf + MSG_HDR_LEN, msg_body, body_len);
-    memcpy(buf + MSG_HDR_LEN + body_len, hash, MSG_SIG_LEN);
-
-	return buf;
-
-}
 
 
 msg_t msg_parser(char_t* msg_str)
