@@ -153,8 +153,11 @@ long int get_time(void) {
 int get_event_id(unsigned long event_hash)
 {
 	khiter_t idx;
-	int eid = 0;
+	int is_missing;
+	int eid = -1;
 	idx = kh_get(event_mapping_table, ptr_event_mapping_table, event_hash);
+	is_missing = (idx == kh_end(ptr_event_mapping_table));
+	if (is_missing) return eid;
 	eid = kh_value(ptr_event_mapping_table, idx);
 	return eid;
 }
@@ -605,11 +608,8 @@ void policy_init() {
 
 	list_node* ptr = ptr_list_head->next;
 	while (ptr != ptr_list_head) {
-		
 		node* nptr = (node*) ptr-> data;
-		
 		nptr->ctr = nptr->loop_cnt;
-		log_info("ctr:%d", nptr->ctr);
 		ptr = ptr->next;
 	}
 
@@ -636,8 +636,6 @@ bool check_policy(int event_id){
 	}
 	
 	node* nptr = (node*) ptr-> data;
-
-	log_info("%d, %d, %d", nptr->id, nptr->next_cnt, nptr->ctr);
 
 	if ((nptr->ctr > 0) && (nptr->id == event_id)) {
 		nptr->ctr -= 1;
@@ -747,18 +745,17 @@ int main(int argc, char const *argv[])
 				
 			}
 
-			else if ((TYPE_TEST == type)){
+			else if (TYPE_TEST == type){
 				log_info("handle test policy");
 
 				
 			}
-			else if ((TYPE_CHECK_RESP == type)){
+			else if (TYPE_CHECK_RESP == type){
 				// printf("get ctr resp %s\n", recv_msg_copy.body);
 				
 				zmq_msg_t resp; 
-				printf("send check resp\n");
-				char dec[] = "ALLOW"; /* weird issue: zmq_msg_init_data can't take macros as input */ 
-				zmq_msg_init_data (&resp, dec, strlen(dec) , NULL, NULL);
+				log_info("get check resp %s", recv_msg.body);
+				zmq_msg_init_data (&resp, recv_msg.body, strlen(recv_msg.body) , NULL, NULL);
 				zmq_msg_send (&resp, listener, 0); 
 				zmq_msg_close(&resp);
 				
@@ -781,12 +778,12 @@ int main(int argc, char const *argv[])
 			if (msg_size <= 1) continue;
 
 			char* tmp = (char*) zmq_msg_data (&buf);
-			char event[5] = {0};
+			char event[EVENT_LEN+1] = {0};
 			strncpy(event, tmp, EVENT_LEN);
-			event[5] = '\0';
+			event[EVENT_LEN+1] = '\0';
 				
 			char* body = tmp + EVENT_LEN + 1;
-			body[msg_size - 4 - 1] = '\0';
+			body[msg_size - EVENT_LEN - 1] = '\0';
 
 			
     		Document d;
@@ -800,7 +797,7 @@ int main(int argc, char const *argv[])
 				zmq_msg_send (&resp, listener, 0); 
 				zmq_msg_close(&resp);
 				
-				msg_str = msg_basic_2(TYPE_CHECK_STATUS, ACTION_TEST, guard_id, self_key);
+				msg_str = msg_basic_2(TYPE_CHECK_STATUS, ACTION_NOOP, guard_id, self_key);
 				zmq_msg_t msg0;
 				zmq_msg_init_data (&msg0, msg_str, strlen(msg_str) , NULL, NULL); 
 				zmq_msg_send (&msg0, updater, 0); 
@@ -829,12 +826,9 @@ int main(int argc, char const *argv[])
 				meta = (char*)calloc(strlen(meta_t.GetString()) + 1, sizeof(char));
 				strncpy(meta, meta_t.GetString(), strlen(meta_t.GetString()));
 
-				data = (char*)calloc(strlen(data_t.GetString()) + 1, sizeof(char));
-				strncpy(data, data_t.GetString(), strlen(data_t.GetString()));
-
 				char* out = (char*)calloc(strlen(meta) + strlen(guard_id) + strlen(event) + strlen(rid) + 4, sizeof(char));    
 				sprintf(out, "%s:%s:%s:%s", guard_id, event, meta, rid);
-
+				
 				/* 
 				* 0 --> url; 1 --> method; 2 --> ip; 3 --> port; 
 				* 4 --> has_body; 5 --> request id
@@ -851,9 +845,8 @@ int main(int argc, char const *argv[])
 
 				if (strncmp(EVENT_GET, event, EVENT_LEN) == 0){
 					
-					check_policy(ev_id);
 
-					msg_str = msg_basic_2(TYPE_CHECK_EVENT, ACTION_TEST, out, self_key);
+					msg_str = msg_basic_2(TYPE_CHECK_EVENT, ACTION_NOOP, out, self_key);
 					zmq_msg_t msg0;
 					
 					zmq_msg_init_data(&msg0, msg_str, strlen(msg_str) , NULL, NULL); 
@@ -873,76 +866,27 @@ int main(int argc, char const *argv[])
 				}
 
 				else if (strncmp(EVENT_END, event, EVENT_LEN) == 0){
-					printf("event end\n");
 					policy_init();
+					msg_str = msg_basic_2(TYPE_EVENT, ACTION_NOOP, out, self_key);
 				}
 
 				else if ((strncmp(EVENT_SEND, event, EVENT_LEN) == 0) || 
 					(strncmp(EVENT_RESP, event, EVENT_LEN) == 0)){
-					printf("event send/resp\n");
-					//write_log(fout, string("get send event"));
-
-					
+				   	msg_str = msg_basic_2(TYPE_EVENT, ACTION_NOOP, out, self_key);
 					
 
-				   	msg_str = msg_basic_2(TYPE_EVENT, ACTION_TEST, out, self_key);
-					
-
-					//write_log(fout, string("send to ctr"));
-					/*
-						if domain/ip is allowed:
-							if domain in guard-enabled:
-								return tag
-							else:
-								return 1
-						else:
-							return 0
-					*/
-
-					// if (check_policy(info[0], info[1], info[2])) {
 					if (check_policy(ev_id)) {
 						
 						char dec[] = "ALLOW"; 
 						zmq_msg_init_data(&resp, dec, strlen(dec), NULL, NULL); 
-							// if (strstr(info[0], "google") != NULL) {
-							// 	char* t = "ALLOW";
-							// 	zmq_msg_init_data (&resp, t, strlen(t) , NULL, NULL); 
-	
-							// }
-							// else if (starts_with (info[0], "lambda.")){
-
-							// 	zmq_msg_init_data (&resp, guard_id, strlen(guard_id) , NULL, NULL); 
-
-							// }
-							// else {
-							// 	zmq_msg_init_data (&resp, guard_id, strlen(guard_id) , NULL, NULL); 
-							// }
 					}
-					else{
-						log_info("2");
-						if (!data_t.IsObject()) {
-							char dec[] = "DENY";
-							// printf("ask for body\n");
-							zmq_msg_init_data(&resp, dec, strlen(dec) , NULL, NULL); 
-						}
-						else if (info[4] != 0) {
-							//printf("get all\n");
-							// char* t = "MORE";
-							char dec[] = "DENY";
-							zmq_msg_init_data(&resp, dec, strlen(dec) , NULL, NULL); 
-						}
-						else {
-							printf("!!!!!!!!\n");
-			
-						}
-					}
+					else {
 
+						char dec[] = "DENY";
+						zmq_msg_init_data(&resp, dec, strlen(dec) , NULL, NULL); 
+					}
 					
 				}
-
-				
-				
-
 
 			}
 			zmq_msg_send (&resp, listener, 0); 

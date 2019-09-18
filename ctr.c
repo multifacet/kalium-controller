@@ -25,11 +25,14 @@ khash_t(event_mapping_table)* ptr_event_mapping_table = kh_init(event_mapping_ta
 
 list* guard_status;
 
-static int debug_call_cnt = 20;
+static list_node* ptr_curr_state;
+static list_node* ptr_list_head;
 
-static char* policy_buf;
-
-
+/* do not handle multiple apps, only return default*/
+char* get_app_name(){
+	char* out = "default";
+	return out;
+}
 
 long int get_time(void) {
 	
@@ -86,9 +89,22 @@ char* get_local_policy(char* func_name)
 	return ptr;
 }
 
+void policy_init() {
+
+	list_node* ptr = ptr_list_head->next;
+	while (ptr != ptr_list_head) {
+		node* nptr = (node*) ptr-> data;
+		nptr->ctr = nptr->loop_cnt;
+		ptr = ptr->next;
+	}
+
+	ptr_curr_state = ptr_list_head;
+}
+
+
 void init_comm_graph(char* fname) 
 {
-	policy_buf = (char*) calloc(1024 * 1024 * 1024, sizeof(char));
+	char* policy_buf = (char*) calloc(1024 * 1024 * 1024, sizeof(char));
 
 	memset(policy_buf, '\0', sizeof(policy_buf));
 
@@ -156,6 +172,9 @@ void init_comm_graph(char* fname)
 	khash_t(policy_table)* h_global = (khash_t(policy_table)*) ptr_policy_table;
 	kh_set(policy_table, h_global, app_name, graph);
 
+	ptr_curr_state = graph;
+	ptr_list_head = graph;
+
 
 	Value& locals = doc["LOCALGRAPH"];
 	Value& url = doc["URL"];
@@ -217,6 +236,47 @@ void my_free (void *data, void *hint)
 {
 	free (data);
 }
+
+bool check_policy(int event_id){
+
+
+	khiter_t k;
+	k =  kh_get(policy_table, ptr_policy_table, get_app_name());
+	int is_missing = (k == kh_end(ptr_policy_table));
+	if (is_missing){
+		log_error("no policy found");
+		EXIT_FAILURE;
+	}
+
+	
+	list_node* ptr = ptr_curr_state;
+	if (ptr == ptr_list_head) {
+		policy_init();
+		ptr_curr_state = ptr_curr_state-> next;
+		ptr = ptr_curr_state;
+	}
+	
+	node* nptr = (node*) ptr-> data;
+	if ((nptr->ctr > 0) && (nptr->id == event_id)) {
+		nptr->ctr -= 1;
+		
+		return true;
+	}
+	
+	for (int i = 0; i < nptr->next_cnt; i++){
+		list_node* next_ptr = nptr -> successors[i];
+		node* next_d_ptr = (node*) next_ptr->data;
+
+		if ((next_d_ptr->ctr > 0) && (next_d_ptr->id == event_id)) {
+			next_d_ptr->ctr -= 1;
+			ptr_curr_state = next_ptr;
+			return true;
+		}
+	}
+
+	return false;
+}
+
 
 
 void register_guard(void* context, char_t* recv_msg, msg_str_buff_t* msg_buff)
@@ -338,110 +398,11 @@ void split_str(char* str, const char* sep, char* out[]){
 
 }
 
-list_node* find_guard_status(list* L, char* guard_id){
-
-	list *p = L->next; 
-	while(p != L) 
-	{
-		if (strcmp(guard_id, (char*)p->data) == 0) {
-			return p;
-		}
-		p = p->next;
-	}
-	return NULL;
-}
-
-int make_policy(char* src, char* event, char* url)
-{
-	// printf("%s\n", recv_msg_copy.body);
-
-	khiter_t k =  kh_get(policy_table, ptr_policy_table, src);
-	int is_missing = (k == kh_end(ptr_policy_table));
-
-	// printf("%s, %s, %s, %d\n", src, event, url, is_missing);
-
-	if (is_missing){
-
-		list* policy = list_init();
-		khash_t(policy_table)* h_policy = (khash_t(policy_table)*) ptr_policy_table;
-		kh_set(policy_table, h_policy, src, policy);
-		policy-> data = (char*) malloc (5 * sizeof(char));
-		memset(policy -> data, '\0', 5);
-		strncpy((char*) policy->data, EVENT_GET, 4);
-		// k =  kh_get(policy_table, ptr_policy_table, src);
-		return POLICY_TABLE_INIT;
-	}
-
-	list* policy = kh_val(ptr_policy_table, k);
 
 
-	if (strcmp((char*) policy->data, EVENT_DONE) == 0){
-
-		return POLICY_TABLE_NOOP;
-	}
-
-	if (strcmp(event, EVENT_GET) == 0){
-
-		return POLICY_TABLE_NOOP;
-	}
-
-	if (strcmp(event,  EVENT_END) == 0){
-		// printf("%s, %s, %s, %d\n", src, event, url, is_missing);
-		policy-> data = (char*) malloc (5 * sizeof(char));
-		memset(policy -> data, '\0', 5);
-		strncpy((char*) policy->data, EVENT_DONE, 4);
-		return POLICY_TABLE_DONE;
-	}
-	else {
-		// printf("%s, %s, %s, %d\n", src, event, url, is_missing);
-		int url_len = strlen(url);
-		event_t* e = (event_t*) malloc (sizeof(event_t));
-		e -> res = (char*) malloc ((url_len + 1) * sizeof(char));
-		e -> res[url_len] = '\0';
-		e -> ename[4] = '\0';
-		strncpy(e -> ename, event, 4);
-		strncpy(e -> res, url, url_len); 
-
-		list_append(policy, (void*)e);
-		return POLICY_TABLE_UPDATE;
-	}
 
 
-}
-
-const char* jsonify_policy(char* src){
-
-	list* policy = kh_val(ptr_policy_table, kh_get(policy_table, ptr_policy_table, src));
-	int p_len = list_length(policy);
-
-	Document d;
-	d.SetObject();
-
-	Document::AllocatorType& allocator = d.GetAllocator();
-
-	Value event_array(kArrayType);
-	Value url_array(kArrayType);
-
-	// printf("%d\n", p_len);
-
-	for (int i = 1; i < p_len + 1; i ++ )
-	{	
-		event_t* e = (event_t*) list_get_element(policy, i);
-		event_array.PushBack(Value(e -> ename, allocator) , allocator);
-		url_array.PushBack(Value(e -> res, allocator) , allocator);
-	}
-
-	d.AddMember("event", event_array, allocator);
-	d.AddMember("url", url_array, allocator);
-
-	StringBuffer buffer;
-	Writer<StringBuffer> writer(buffer);
-	d.Accept(writer);
-
-	return buffer.GetString();
-}
-
-	static int
+static int
 get_monitor_event (void *monitor, int *value, char **address)
 {
 	// First frame in message contains event number and value
@@ -542,17 +503,8 @@ static void * worker_routine (void *context)
 					break;
 
 				case TYPE_INFO:
-					{
-
-						FILE *fp;
-						printf("get1: %ld\n", get_time());
-
-						// fp = fopen("guard_start.log", "a+");
-						// fprintf(fp, recv_msg_copy.body);
-						// fprintf(fp, "\n");
-						// fclose(fp);
-						continue;
-					}
+					continue;
+					
 				case TYPE_POLICY:
 					{
 
@@ -572,28 +524,25 @@ static void * worker_routine (void *context)
 
 				case TYPE_EVENT:
 					{	
-						char* info[9];
+				
+						log_info("event %s", recv_msg.body);
 
-						printf("!!!%s\n", recv_msg.body);
+						char* info[9];
 						split_str(recv_msg.body, ":", info);
-						char* src = info[0];
-						char* event = info[1];
-						char* url = info[2];
-						char* ip = info[3];
-						char* port = info[4];
-						char* method = info[5];
-						char* has_body = info[6];
-						char* _id = info[7];
-						char* rid = info[8];
-						int ret = make_policy(src, event, url);
+
+						unsigned ev_hash = 0; 
+						
+						ev_hash = djb2hash(info[0], info[1], info[2], info[3]);
+						int ev_id = get_event_id(ev_hash);						
+						check_policy(ev_id);
+
 
 						zmq_msg_t resp_msg;
-						char* done = "done";
-						int rc = zmq_msg_init_data (&resp_msg, done, strlen(done) , NULL, NULL); 
+						char done[] = "0";
+						zmq_msg_init_data (&resp_msg, done, strlen(done) , NULL, NULL); 
 
-
-						rc = zmq_msg_send(&id, worker, ZMQ_SNDMORE);
-						rc = zmq_msg_send(&resp_msg, worker, 0); 
+						zmq_msg_send(&id, worker, ZMQ_SNDMORE);
+						zmq_msg_send(&resp_msg, worker, 0); 
 
 						zmq_msg_close (&resp_msg);
 						free(recv_msg.body);
@@ -603,41 +552,36 @@ static void * worker_routine (void *context)
 					}
 
 				case TYPE_CHECK_STATUS:
-					{
 
-						printf("check status\n");
-						list_node* p = find_guard_status(guard_status, recv_msg.body);
-
-						khash_t(guard_sts_table)* h_sts_table = (khash_t(guard_sts_table)*) ptr_guard_sts_table;
-						printf("check: %s\n", kh_get_str_val(guard_sts_table, h_sts_table, (char*)p->data));
-
-						continue;
-
-					}
+					continue;
 
 				case TYPE_CHECK_EVENT:
 					{
 
-						// printf("event check\n");
+						log_info("event %s", recv_msg.body);
 						char* info[9];
-
-						printf("aaa%s\n", recv_msg.body);
 						split_str(recv_msg.body, ":", info);
-						char* src = info[0];
-						char* event = info[1];
-						char* url = info[2];
-						char* ip = info[3];
-						char* port = info[4];
-						char* method = info[5];
-						char* has_body = info[6];
-						char* _id = info[7];
-						char* rid = info[8];
-						int ret = make_policy(src, event, url);
 
-						zmq_msg_t resp_msg;
-						char* done = "done";
+						unsigned ev_hash = 0; 
+						ev_hash = djb2hash(info[0], info[1], info[2], info[3]);
+			
+						int ev_id = get_event_id(ev_hash);
+	
+						printf("%u, %d\n", ev_hash, ev_id);
 
-						check_resp(worker, done,  &msg_str_buff);
+						
+						if (check_policy(ev_id)) {
+							
+							char dec[] = "ALLOW"; 
+							check_resp(worker, dec,  &msg_str_buff);
+						}
+						else {
+
+							char dec[] = "DENY";
+							check_resp(worker, dec,  &msg_str_buff);
+						}
+
+						
 						break;
 
 
