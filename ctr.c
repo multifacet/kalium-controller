@@ -236,6 +236,7 @@ bool check_policy(int event_id){
 
 
 	khiter_t k;
+	bool ret = false;
 	k =  kh_get(policy_table, ptr_policy_table, get_app_name());
 	int is_missing = (k == kh_end(ptr_policy_table));
 	if (is_missing){
@@ -251,10 +252,15 @@ bool check_policy(int event_id){
 	}
 	
 	node* nptr = (node*) ptr-> data;
-	if ((nptr->ctr > 0) && (nptr->id == event_id)) {
-		nptr->ctr -= 1;
-		
-		return true;
+
+	if (nptr->ctr > 0) {
+		if (nptr->id == event_id) {
+			nptr->ctr -= 1;
+			ret = true;
+		}
+		else {
+			ret = false;
+		}
 	}
 	
 	for (int i = 0; i < nptr->next_cnt; i++){
@@ -262,80 +268,22 @@ bool check_policy(int event_id){
 		node* next_d_ptr = (node*) next_ptr->data;
 
 		if ((next_d_ptr->ctr > 0) && (next_d_ptr->id == event_id)) {
-			next_d_ptr->ctr -= 1;
-			ptr_curr_state = next_ptr;
-			return true;
+				next_d_ptr->ctr -= 1;
+				ptr_curr_state = next_ptr;
+				ret = true;
 		}
 	}
 
-	return false;
+#ifdef DEBUG
+	if ((((node*)ptr_curr_state->data)->ctr == 0) && 
+		(ptr_curr_state->next == ptr_list_head)) {
+		policy_init();
+	}
+
+#endif 
+	return ret;
 }
 
-
-
-void register_guard(void* context, char* recv_msg, msg_str_buff_t* msg_buff)
-{
-
-
-	char* guard_id = recv_msg;
-	keys_t tmp_k  = gen_key_pair();
-	int body_len = 32 + 64;
-
-	header_t hdr_t = init_msg_header(TYPE_KEY_DIST, ACTION_TEST, body_len);
-	char* msg_hdr = header_to_str(hdr_t);
-
-	char* msg_str = (char*) calloc (MSG_HDR_LEN + body_len + 1, sizeof(char));
-	memset(msg_str, '\0', MSG_HDR_LEN + body_len + 1);
-
-	char* pos = msg_str;
-	memcpy(pos, msg_hdr, MSG_HDR_LEN);
-	pos = msg_str + MSG_HDR_LEN;
-	memcpy(pos, keys_to_str(tmp_k), 96);
-
-	msg_buff -> msg_str = msg_str;
-	msg_buff -> msg_len = MSG_HDR_LEN + body_len;
-
-}
-
-
-void send_policy(void* context, char* recv_msg, msg_str_buff_t* msg_buff)
-{
-
-	char* guard_id = recv_msg;
-	int rc;
-	char* policy = get_local_policy(guard_id);
-
-	log_info("ready to send policy %s", policy);
-
-	int body_len = strlen(policy);
-	header_t hdr_t = init_msg_header(TYPE_POLICY, ACTION_POLICY_ADD, body_len);
-	char* msg_hdr = header_to_str(hdr_t);
-	char* msg_str = (char*) calloc (MSG_HDR_LEN + body_len + 1, sizeof(char));
-	memset(msg_str, '\0', MSG_HDR_LEN + body_len + 1);
-	memcpy(msg_str, msg_hdr, MSG_HDR_LEN);
-	memcpy(msg_str + MSG_HDR_LEN, policy, body_len);
-
-	msg_buff -> msg_str = msg_str;
-	msg_buff -> msg_len = MSG_HDR_LEN + body_len;
-
-}
-
-
-void check_resp(void* context, char* res, msg_str_buff_t* msg_buff)
-{
-
-	int body_len = strlen(res);
-	header_t hdr_t = init_msg_header(TYPE_CHECK_RESP, ACTION_TEST, body_len);
-	char* msg_hdr = header_to_str(hdr_t);
-	char* msg_str = (char*) calloc (MSG_HDR_LEN + body_len + 1, sizeof(char));
-	memset(msg_str, '\0', MSG_HDR_LEN + body_len + 1);
-	memcpy(msg_str, msg_hdr, MSG_HDR_LEN);
-	memcpy(msg_str + MSG_HDR_LEN, res, body_len);
-
-	msg_buff -> msg_str = msg_str;
-	msg_buff -> msg_len = MSG_HDR_LEN + body_len;
-
-}
 
 void send_to_guard(void* socket, zmq_msg_t id, char msg_type, char action, char* data)
 {	
@@ -427,7 +375,7 @@ static void * worker_routine (void *context)
 							khiter_t k =  kh_get(policy_local_table, ptr_policy_local_table, recv_msg.body);
 							int is_missing = (k == kh_end(ptr_policy_local_table));
 							if (!is_missing){
-				
+
 								char* policy = get_local_policy(recv_msg.body);
 								send_to_guard(worker, id, TYPE_POLICY, ACTION_POLICY_ADD, policy);
 							}
@@ -449,7 +397,7 @@ static void * worker_routine (void *context)
 						strncpy(event, info[1], EVENT_LEN);
 
 						unsigned ev_hash = djb2hash(info[0], info[1], info[2], info[3]);
-						int ev_id = get_event_id(ev_hash);						
+						int ev_id = get_event_id(ev_hash);					
 						check_policy(ev_id);
 
 						send_to_guard(worker, id, NULL, NULL, NULL);

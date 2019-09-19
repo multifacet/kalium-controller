@@ -418,9 +418,13 @@ bool check_policy(int event_id){
 	
 	node* nptr = (node*) ptr-> data;
 
-	if ((nptr->ctr > 0) && (nptr->id == event_id)) {
-		nptr->ctr -= 1;
-		return true;
+	if (nptr->ctr > 0) {
+		if (nptr->id == event_id) {
+			nptr->ctr -= 1;
+			return true;
+		}
+		
+		return false;
 	}
 	
 	for (int i = 0; i < nptr->next_cnt; i++){
@@ -430,6 +434,7 @@ bool check_policy(int event_id){
 		if ((next_d_ptr->ctr > 0) && (next_d_ptr->id == event_id)) {
 			next_d_ptr->ctr -= 1;
 			ptr_curr_state = next_ptr;
+			
 			return true;
 		}
 	}
@@ -624,6 +629,7 @@ int main(int argc, char const *argv[])
 
 				unsigned ev_hash = djb2hash(guard_id, event, info[0], info[1]);
 				int ev_id = get_event_id(ev_hash);
+
 
 				if (strncmp(EVENT_GET, event, EVENT_LEN) == 0){
 					
