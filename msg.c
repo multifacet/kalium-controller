@@ -39,12 +39,10 @@ header_t str_to_header(char* str)
 
 char* keys_to_str(keys_t keys)
 {
-	static char buf[64+32];
-
-	memset(buf, 0, (64+32) * sizeof(char));
+	static char buf[64 + 32 + 1];
+	memset(buf, '\0', (64 + 32 + 1) * sizeof(char));
 	memcpy(buf, keys.key_priv, 32);
 	memcpy(buf+32, keys.key_pub, 64);
-
 	return buf;
 }
 
@@ -54,7 +52,7 @@ keys_t str_to_keys(char* str)
 	keys_t key_pair;
 	unsigned char* tstr = (unsigned char*) str;
 	memcpy(key_pair.key_priv, tstr, 32);
-	memcpy(key_pair.key_pub, tstr+32, 64);
+	memcpy(key_pair.key_pub, tstr + 32, 64);
 	return key_pair;
 }
 

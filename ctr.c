@@ -337,6 +337,20 @@ void check_resp(void* context, char* res, msg_str_buff_t* msg_buff)
 
 }
 
+void send_to_guard(void* socket, zmq_msg_t id, char msg_type, char action, char* data)
+{	
+
+	zmq_msg_t msg;
+	char* msg_str = "";
+	if (data) {
+		msg_str = msg_basic(msg_type, action, data);
+	}
+	zmq_msg_init_data(&msg, msg_str, strlen(msg_str), NULL, NULL); 
+	zmq_msg_send(&id, socket, ZMQ_SNDMORE);
+	zmq_msg_send(&msg, socket, 0); 
+	zmq_msg_close (&msg);
+}
+
 
 void split_str(char* str, const char* sep, char* out[]){
 	int i = 0;
@@ -396,16 +410,15 @@ static void * worker_routine (void *context)
 			char type = recv_msg.header.type;
 			char action = recv_msg.header.action;
 
-			char* msg_str;
-			msg_str_buff_t msg_str_buff;
-
-
 			switch (type){
-				case TYPE_INIT:
-					register_guard(worker, recv_msg.body, &msg_str_buff);
+				case TYPE_INIT: 
+				{
+					keys_t k_tmp  = gen_key_pair();
+					char* k_str = keys_to_str(k_tmp);
+					send_to_guard(worker, id, TYPE_KEY_DIST, ACTION_NOOP, k_str);
 					log_info("guard registration");
 					break;
-
+				}
 				case TYPE_POLICY:
 					{
 
@@ -414,10 +427,12 @@ static void * worker_routine (void *context)
 							khiter_t k =  kh_get(policy_local_table, ptr_policy_local_table, recv_msg.body);
 							int is_missing = (k == kh_end(ptr_policy_local_table));
 							if (!is_missing){
-								send_policy(worker, recv_msg.body, &msg_str_buff);
+				
+								char* policy = get_local_policy(recv_msg.body);
+								send_to_guard(worker, id, TYPE_POLICY, ACTION_POLICY_ADD, policy);
 							}
 							else {
-								continue;
+								log_error("cannot find policy");
 							}
 						}					
 					}
@@ -433,36 +448,23 @@ static void * worker_routine (void *context)
 						char event[EVENT_LEN+1] = {'\0'};
 						strncpy(event, info[1], EVENT_LEN);
 
-
 						unsigned ev_hash = djb2hash(info[0], info[1], info[2], info[3]);
 						int ev_id = get_event_id(ev_hash);						
 						check_policy(ev_id);
 
+						send_to_guard(worker, id, NULL, NULL, NULL);
 
-						zmq_msg_t resp_msg;
-						char done[] = "";
-						zmq_msg_init_data(&resp_msg, done, strlen(done) , NULL, NULL); 
-						zmq_msg_send(&id, worker, ZMQ_SNDMORE);
-						zmq_msg_send(&resp_msg, worker, 0); 
-						zmq_msg_close (&resp_msg);
 						free(recv_msg.body);
 
 #ifdef DEBUG
 						if (strncmp(EVENT_END, event, EVENT_LEN) == 0){
 							log_info("test: get guard state");
-							zmq_msg_t resp_msg;
-							char* msg_str = msg_basic(TYPE_CHECK_STATUS, ACTION_CTR_REQ, "test");
-							zmq_msg_init_data(&resp_msg, msg_str, strlen(msg_str) , NULL, NULL); 
-							zmq_msg_send(&cid, worker, ZMQ_SNDMORE);
-							zmq_msg_send(&resp_msg, worker, 0); 
-							zmq_msg_close (&resp_msg);
+							send_to_guard(worker, cid, TYPE_CHECK_STATUS, ACTION_CTR_REQ, "test");
 
 						}
 
-#endif 
-
+#endif
 						continue;
-
 					}
 
 				case TYPE_CHECK_EVENT:
@@ -471,24 +473,15 @@ static void * worker_routine (void *context)
 						log_info("event %s", recv_msg.body);
 						char* info[9];
 						split_str(recv_msg.body, ":", info);
-
 						unsigned ev_hash = djb2hash(info[0], info[1], info[2], info[3]);
-			
 						int ev_id = get_event_id(ev_hash);
 
-						
 						if (check_policy(ev_id)) {
-							
-							char dec[] = "ALLOW"; 
-							check_resp(worker, dec,  &msg_str_buff);
+							send_to_guard(worker, id, TYPE_CHECK_RESP, ACTION_TEST, "ALLOW");
 						}
 						else {
-
-							char dec[] = "DENY";
-							check_resp(worker, dec,  &msg_str_buff);
+							send_to_guard(worker, id, TYPE_CHECK_RESP, ACTION_TEST, "DENY");
 						}
-
-						
 						break;
 
 
@@ -512,16 +505,6 @@ static void * worker_routine (void *context)
 					break;
 
 			}
-
-
-			zmq_msg_t resp_msg;
-
-			int rc = zmq_msg_init_data(&resp_msg, msg_str_buff.msg_str, msg_str_buff.msg_len , NULL, NULL); 
-			// assert (rc == 0);
-
-			rc = zmq_msg_send(&id, worker, ZMQ_SNDMORE);
-			rc = zmq_msg_send(&resp_msg, worker, 0); 
-			zmq_msg_close (&resp_msg);
 
 			free(recv_msg.body);
 
