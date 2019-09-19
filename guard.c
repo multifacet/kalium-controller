@@ -72,23 +72,6 @@ void split_str(char* str, const char* sep, char* out[]){
 }
 
 
-char* rand_string(char *str, size_t size)
-{
-	srand(time(NULL));
-    const char charset[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJK1234567890";
-    if (size) {
-        --size;
-        for (size_t n = 0; n < size; n++) {
-            int key = rand() % (int)(sizeof charset - 1);
-            str[n] = charset[key];
-        }
-        str[size] = '\0';
-    }
-    return str;
-}
-
-
-
 void strip(char* str, char c) {
     char *pr = str, *pw = str;
     while (*pr) {
@@ -233,7 +216,7 @@ void key_init_handler(char* msg_body, int msg_body_len)
 	return;
 }
 
-
+/* Send a message to the ctr */
 void send_to_ctr(void* socket, char msg_type, char action, char* data)
 {
 	zmq_msg_t msg;
@@ -243,7 +226,7 @@ void send_to_ctr(void* socket, char msg_type, char action, char* data)
 	zmq_msg_close(&msg);
 }
 
-
+/* Send a message to the client */
 void send_to_client(void* socket, char* data)
 {
 

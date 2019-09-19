@@ -27,12 +27,13 @@ khash_t(event_mapping_table)* ptr_event_mapping_table = kh_init(event_mapping_ta
 static list_node* ptr_curr_state;
 static list_node* ptr_list_head;
 
-/* do not handle multiple apps, only return default*/
+/* Do not handle multiple apps, only return default*/
 char* get_app_name(){
 	char* out = "default";
 	return out;
 }
 
+/* Get current timestamp in us */
 unsigned long get_time(void) {
 	
 	struct timeval tv;
@@ -42,6 +43,23 @@ unsigned long get_time(void) {
 	return (unsigned long)1000000 * tv.tv_sec + tv.tv_usec;
 }
 
+/* 
+* Split a string based on the separator
+* @str: Input string
+* @sep: The separator e.g., "," and "#"
+* @out: Storing the split results
+*/
+void split_str(char* str, const char* sep, char* out[]){
+	int i = 0;
+	char *p = strtok (str, sep);
+	while (p != NULL)
+	{
+	    out[i++] = p;
+	    p = strtok (NULL, sep);
+	}
+
+}
+/* Generate ecc key pairs */
 keys_t gen_key_pair()
 {	
 	keys_t key_pair;
@@ -50,12 +68,12 @@ keys_t gen_key_pair()
 	return key_pair;
 }
 
+/* Generate ecc key pairs */
 int load_policy(char* fname, char* buffer)
 {
 
 	FILE * f = fopen (fname, "rb");
 	int len;
-
 	if (f)
 	{
 		fseek (f, 0, SEEK_END);
@@ -284,6 +302,9 @@ bool check_policy(int event_id){
 			next_d_ptr->ctr -= 1;
 			ptr_curr_state = next_ptr;
 			policy_reset_test();
+
+
+
 			return true;
 		}
 	}
@@ -291,7 +312,7 @@ bool check_policy(int event_id){
 	return false;
 }
 
-
+/* send a message to the guard */
 void send_to_guard(void* socket, zmq_msg_t id, char msg_type, char action, char* data)
 {	
 
@@ -307,16 +328,7 @@ void send_to_guard(void* socket, zmq_msg_t id, char msg_type, char action, char*
 }
 
 
-void split_str(char* str, const char* sep, char* out[]){
-	int i = 0;
-	char *p = strtok (str, sep);
-	while (p != NULL)
-	{
-	    out[i++] = p;
-	    p = strtok (NULL, sep);
-	}
 
-}
 
 
 
