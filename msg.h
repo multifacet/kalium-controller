@@ -8,8 +8,8 @@ keys_t str_to_keys(char* str);
 void print_hex(char* str);
 void print_hex_len(char* str, int len);
 
-char_t* msg_init(char* guard_id);
-char_t* msg_basic(char type, char action, char* msg_body);
-char_t* msg_basic2(char type, char action, char* msg_body, keys_t keys);
-msg_t msg_parser(char_t* msg_str);
+char* msg_init(char* guard_id);
+char* msg_basic(char type, char action, char* msg_body);
+char* msg_basic2(char type, char action, char* msg_body, keys_t keys);
+msg_t msg_parser(char* msg_str);
 int msg_verfy(msg_t msg, unsigned char* key_pub, const uECC_Curve_t* curve);

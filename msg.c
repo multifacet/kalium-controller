@@ -1,47 +1,47 @@
 #include "msg.h"
 
-header_t init_msg_header(char_t type, char_t action, int msg_len)
+header_t init_msg_header(char type, char action, int msg_len)
 {
 
 	header_t h;
 	h.type = type;
 	h.action = action;
-  	memset(h.len, 0, (MAX_LEN_SIZE + 1) * sizeof(char_t));
+  	memset(h.len, 0, (MAX_LEN_SIZE + 1) * sizeof(char));
   	memcpy(h.len, "00000000", MAX_LEN_SIZE);
     sprintf(h.len, "%08lx", (long unsigned int)msg_len);
 	return h;
 }
 
 
-char_t* header_to_str(header_t h)
+char* header_to_str(header_t h)
 {
 	// char* str = (char*) calloc (10,  sizeof(char));
-  	static char_t hstr[MSG_HDR_LEN + 1];
-  	memset(hstr, 0, (MSG_HDR_LEN + 1) * sizeof(char_t));
+  	static char hstr[MSG_HDR_LEN + 1];
+  	memset(hstr, 0, (MSG_HDR_LEN + 1) * sizeof(char));
 	hstr[0] = h.type;
 	hstr[1] = h.action;
 	memcpy(hstr+2, h.len, 8);
 	return hstr;
 }
 
-header_t str_to_header(char_t* str)
+header_t str_to_header(char* str)
 {
 
     header h;
     h.type = str[0];
     h.action = str[1];
-    memset(h.len, 0, (MAX_LEN_SIZE + 1) * sizeof(char_t));
+    memset(h.len, 0, (MAX_LEN_SIZE + 1) * sizeof(char));
     memcpy(h.len, str + 2, MAX_LEN_SIZE);
     return h;
 }
 
 
 
-char_t* keys_to_str(keys_t keys)
+char* keys_to_str(keys_t keys)
 {
-	static char_t buf[64+32];
+	static char buf[64+32];
 
-	memset(buf, 0, (64+32) * sizeof(char_t));
+	memset(buf, 0, (64+32) * sizeof(char));
 	memcpy(buf, keys.key_priv, 32);
 	memcpy(buf+32, keys.key_pub, 64);
 
@@ -49,7 +49,7 @@ char_t* keys_to_str(keys_t keys)
 }
 
 
-keys_t str_to_keys(char_t* str)
+keys_t str_to_keys(char* str)
 {
 	keys_t key_pair;
 	unsigned char* tstr = (unsigned char*) str;
@@ -59,7 +59,7 @@ keys_t str_to_keys(char_t* str)
 }
 
 
-void print_hex(char_t* str)
+void print_hex(char* str)
 {
 	for (int i = 0; i < (int) sizeof(str); i++)
       printf("%x", str[i]);
@@ -67,7 +67,7 @@ void print_hex(char_t* str)
 }
 
 
-void print_hex_len(char_t* str, int len)
+void print_hex_len(char* str, int len)
 {
 	for (int i = 0; i < len; i++)
       printf("%02x", (unsigned char)str[i]);
@@ -77,17 +77,17 @@ void print_hex_len(char_t* str, int len)
 
 
 
-char* msg_init(char_t* guard_id)
+char* msg_init(char* guard_id)
 {
 
-	char_t* msg_body = guard_id;
+	char* msg_body = guard_id;
 	int msg_len = strlen(msg_body);
 	
 	header_t h = init_msg_header(TYPE_INIT, ACTION_TEST, msg_len);
-	char_t* t_hdstr = header_to_str(h);
+	char* t_hdstr = header_to_str(h);
 	int buf_size = MSG_HDR_LEN + msg_len + 1;
 
-    char_t* buf = (char_t*) calloc (buf_size, sizeof(char_t));
+    char* buf = (char*) calloc (buf_size, sizeof(char));
     memset(buf, 0, buf_size);
     memcpy(buf, t_hdstr, MSG_HDR_LEN);
     memcpy(buf+MSG_HDR_LEN, msg_body, msg_len);
@@ -102,15 +102,13 @@ char* msg_basic(char type, char action, char* msg_body)
 {
 
 	unsigned char hash[SHA256_DIGEST_SIZE] = {0};
-    unsigned char sig[64] = {0};
-
 	int body_len = strlen(msg_body);
 	header_t h = init_msg_header(type, action, body_len);
-    char_t* t_hd_str = header_to_str(h);
+    char* t_hd_str = header_to_str(h);
 
     int buf_size = MSG_HDR_LEN + MSG_SIG_LEN + body_len + 1;
 
-    char_t* buf = (char_t*) calloc (buf_size,  sizeof(char_t));
+    char* buf = (char*) calloc (buf_size,  sizeof(char));
     memset(buf, 0, buf_size);
 
     memcpy(buf, t_hd_str, MSG_HDR_LEN);
@@ -122,7 +120,7 @@ char* msg_basic(char type, char action, char* msg_body)
 }
 
 
-char* msg_basic2(char_t type, char_t action, char_t* msg_body, keys_t keys)
+char* msg_basic2(char type, char action, char* msg_body, keys_t keys)
 {
 
 	int body_len = strlen(msg_body);
@@ -143,11 +141,11 @@ char* msg_basic2(char_t type, char_t action, char_t* msg_body, keys_t keys)
     }
 
 
-    char_t* t_hd_str = header_to_str(h);
+    char* t_hd_str = header_to_str(h);
 
     int buf_size = MSG_HDR_LEN + MSG_SIG_LEN + body_len + 1;
 
-    char_t* buf = (char_t*) calloc (buf_size,  sizeof(char_t));
+    char* buf = (char*) calloc (buf_size,  sizeof(char));
     memset(buf, 0, buf_size);
 
     memcpy(buf, t_hd_str, MSG_HDR_LEN);
@@ -161,7 +159,7 @@ char* msg_basic2(char_t type, char_t action, char_t* msg_body, keys_t keys)
 
 
 
-msg_t msg_parser(char_t* msg_str)
+msg_t msg_parser(char* msg_str)
 {
 
 	msg_t msg;
@@ -172,7 +170,7 @@ msg_t msg_parser(char_t* msg_str)
 	msg.header = str_to_header(hdr_str);
 	int body_len = strtol(msg.header.len, NULL, 16);
 	
-	msg.body = (char_t*) calloc (body_len+1, sizeof(char_t));
+	msg.body = (char*) calloc (body_len+1, sizeof(char));
 	memset(msg.body, 0, body_len+1);
 	memcpy(msg.body, msg_str + MSG_HDR_LEN, body_len);
 	

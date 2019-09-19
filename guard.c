@@ -7,7 +7,6 @@ using namespace rapidjson;
 using namespace std;
 
 
-
 pthread_mutex_t lock_x;
 
 //name of the hash table
@@ -32,11 +31,8 @@ khash_t(url_whitelist)* ptr_url_whitelist = kh_init(url_whitelist);
 khash_t(policy_table)* ptr_policy_table = kh_init(policy_table);
 khash_t(event_mapping_table)* ptr_event_mapping_table = kh_init(event_mapping_table);
 
-//ecc keys for self and previous nodes
-static keys_t self_key;
-static keys_t prev_key[10];
 
-static int prev_cnt = 0;
+
 
 static int ior = 0;
 static int netr = 0;
@@ -44,7 +40,7 @@ static int netr = 0;
 static list_node* ptr_curr_state;
 static list_node* ptr_list_head;
 
-const struct uECC_Curve_t* curve = uECC_secp256r1();
+// const struct uECC_Curve_t* curve = uECC_secp256r1();
 
 char* get_func_name(){
 #ifdef DEBUG
@@ -70,7 +66,7 @@ void split_str(char* str, const char* sep, char* out[]){
 	while (p != NULL)
 	{
 	    out[i++] = p;
-	    p = strtok (NULL, sep);
+	    p = strtok(NULL, sep);
 	}
 
 }
@@ -78,12 +74,12 @@ void split_str(char* str, const char* sep, char* out[]){
 
 char* rand_string(char *str, size_t size)
 {
-	srand ( time(NULL) );
+	srand(time(NULL));
     const char charset[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJK1234567890";
     if (size) {
         --size;
         for (size_t n = 0; n < size; n++) {
-            int key = rand() % (int) (sizeof charset - 1);
+            int key = rand() % (int)(sizeof charset - 1);
             str[n] = charset[key];
         }
         str[size] = '\0';
@@ -139,15 +135,13 @@ void get_inst_id(char* inst_id){
     }
 
     fclose(fp);
-
-
 }
 
-long int get_time(void) {
+unsigned long get_time(void) {
     struct timeval tv;
     gettimeofday(&tv,NULL);
     //return (((long int)tv.tv_sec)*1000)+(tv.tv_usec/1000);
-    return (long int)1000000 * tv.tv_sec + tv.tv_usec;
+    return (unsigned long )1000000 * tv.tv_sec + tv.tv_usec;
 }
 
 int get_event_id(unsigned long event_hash)
@@ -178,71 +172,6 @@ unsigned long djb2hash(char *func_name, char* event, char* url, char* action)
 void my_free (void *data, void *hint)
 {
 	free (data);
-}
-
-char* find_path_name(int wd, struct path_info path_list[]){
-
-    for (int i = 0; i < 1024; i++){
-      if (path_list[i].wd == wd){
-        return path_list[i].name;
-      }
-    }
-
-    return NULL;
-
-}
-
-void copy_file(char* src, char* dst) {
-
-      FILE *fptr1, *fptr2;
-      fptr1 = fopen(src, "r");
-      fptr2 = fopen(dst, "w");
-      char c; 
-      c = fgetc(fptr1);
-      while (c != EOF)
-      {
-          fputc(c, fptr2);
-          c = fgetc(fptr1);
-      }
-      fclose(fptr1);
-      fclose(fptr2);
-}
-
-
-int recursive_add(const char *name, int ifd, int file_cnt, struct path_info path_list[], struct pollfd fds[])
-{
-    DIR *dir;
-    struct dirent *entry;
-
-    if (!(dir = opendir(name)))
-        return file_cnt;
-
-    while ((entry = readdir(dir)) != NULL) {
-        if (entry->d_type == DT_DIR) {
-            
-            if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
-                continue;
-            char* path = (char*) malloc(1024 * sizeof(char));
-            memset(path, '\0', 1024);
-            snprintf(path, 1024, "%s/%s", name, entry->d_name);
-            
-
-            file_cnt += 1;
-            int wd = inotify_add_watch(ifd, path, IN_ALL_EVENTS); 
-            fds[file_cnt].events = POLLIN;
-            fds[file_cnt].fd = ifd;
-
-            path_list[file_cnt].wd = wd;
-            path_list[file_cnt].name = path;
-
-            printf("Watching %d, %s, %d\n", wd, find_path_name(wd, path_list), file_cnt);
-
-            file_cnt = recursive_add(path, ifd, file_cnt, path_list, fds);
-        } 
-    }
-    closedir(dir);
-
-    return file_cnt;
 }
 
 
@@ -287,12 +216,8 @@ void key_init_req(void* socket, char* guard_id)
 
 	char* msg_str = msg_init(guard_id);
 	zmq_msg_t msg; 
-
-	int rc = zmq_msg_init_data(&msg, msg_str, strlen(msg_str) , my_free, NULL); 
-
-	//printf ("Init guard key\n");
+	zmq_msg_init_data(&msg, msg_str, strlen(msg_str) , my_free, NULL); 
 	zmq_msg_send(&msg, socket, 0); 
-
 	zmq_msg_close(&msg);
 
 }
@@ -301,17 +226,8 @@ void key_init_req(void* socket, char* guard_id)
 
 void key_init_handler(char* msg_body, int msg_body_len)
 {
-
-
-	self_key = str_to_keys(msg_body);
-
-	prev_cnt = msg_body_len / 96 - 1;
-
-	for (int i = 0; i < prev_cnt; i++){
-		prev_key[i] = str_to_keys(msg_body + (i + 1) * 96);
-
-	}
-
+	/* handle key here */
+	return;
 }
 
 
@@ -465,133 +381,6 @@ void policy_init_handler(char* msg_body, int msg_body_len)
 
 
 
-void* disk_monitor(void* context)
-{
-
-  struct path_info path_list[1024];
-  struct pollfd fds[1024];
-  int file_cnt = 0;
-  int nfds = file_cnt + 1;
-
-  int ifd, wd;
-  char buf[INOTIFY_EVENT_BUF_LEN] __attribute__ ((aligned(8)));
-  int numRead;
-  char *p;
-  struct inotify_event *ev;
-
-  char* root_dir = "/tmp";
-
-  ifd = inotify_init();
-  wd = inotify_add_watch(ifd, root_dir, IN_ALL_EVENTS);
- 
-  fds[file_cnt].events = POLLIN;
-  fds[file_cnt].fd = ifd;
-
-
-  path_list[file_cnt].wd = wd;
-  path_list[file_cnt].name = (char*) malloc((strlen(root_dir) + 1) * sizeof(char));
-  strncpy(path_list[file_cnt].name, root_dir, strlen(root_dir));
-  path_list[file_cnt].name[strlen(root_dir)] = '\0';
-
-  printf("Watching %d, %s, %d\n", wd, find_path_name(wd, path_list), file_cnt);
-  
-
-  file_cnt = recursive_add("/tmp", ifd, file_cnt, path_list, fds);
-  
-  nfds = file_cnt + 1;
-
-  
-
-
-  while(1) {
-
-    int num_events = poll(fds, nfds, -1);
-
-    for (int i = 0; i < num_events; i++) {
-
-      for (int cnt = 0; cnt < nfds; cnt++) {
-
-        if (fds[cnt].revents & POLLIN) {
-
-          numRead = read(fds[cnt].fd, buf, INOTIFY_EVENT_BUF_LEN);
-
-          for (p = buf; p < buf + numRead; ) {
-
-            ev = (struct inotify_event *) p;
-            
-            if (!(ev -> mask ^ (IN_CREATE | IN_ISDIR)))  {
-                
-                file_cnt += 1;
-                nfds += 1;
-
-                char* parent_path = find_path_name(ev->wd, path_list);
-                char* sub_path = ev -> name;
-                int new_path_len = strlen(parent_path) + strlen(sub_path);
-                char* new_path = (char*) malloc( (new_path_len + 1) * sizeof(char));
-                sprintf(new_path, "%s/%s", parent_path, sub_path);
-                new_path[new_path_len+1] = '\0';
-
-                int wd = inotify_add_watch(ifd, new_path, IN_ALL_EVENTS); 
-                fds[file_cnt].events = POLLIN;
-                fds[file_cnt].fd = ifd;
-
-                path_list[file_cnt].wd = wd;
-                path_list[file_cnt].name = new_path;
-                
-                // printf("create new dir %d, %s, %s\n", wd, new_path, ev->name);
-            }
-
-            if (!(ev -> mask ^ (IN_CREATE)))  {
-
-                char* parent_path = find_path_name(ev->wd, path_list);
-                char* sub_path = ev -> name;
-                int file_path_len = strlen(parent_path) + strlen(sub_path);
-                char* file_path = (char*) malloc( (file_path_len + 1) * sizeof(char));
-                sprintf(file_path, "%s/%s", parent_path, sub_path);
-                file_path[file_path_len+1] = '\0';
-                // printf("create new file %s\n", file_path);
-                // struct stat info;
-                // stat(file_path, &info);
-                // printf("original permissions were: %08x\n", info.st_mode);
-                int ret = lookup(io_whitelist, file_path);
-                
-                if (ret) {
-                  struct stat info;
-                  stat(file_path, &info);
-                  printf("%s, %d, %d, %d\n", file_path, ret, getuid(), info.st_uid) ;
-                  if (getuid() != info.st_uid) {
-                  	
-                    copy_file(file_path, "tmp.db");
-                  
-
-                    int rr = remove(file_path);
-  					if (0 == rr) {
-                    	copy_file("tmp.db", file_path); 
-                    }
-                  }
-                	if (chmod(file_path, S_IRWXO | S_IRWXG ) != 0)
-                      	perror("chmod() error");
-                }
-            }
-
-            if (!(ev -> mask ^ (IN_MODIFY)))  {
-
-                // printf("modify file %d, %s\n", ev->wd, ev->name);
-            }
-
-            p += sizeof(struct inotify_event) + ev->len;
-          }
-
-        }
-      }
-    }
-
-  }
-
-}
-
-
-
 
 void policy_init() {
 
@@ -613,7 +402,7 @@ bool check_policy(int event_id){
 	int is_missing = (k == kh_end(ptr_policy_table));
 	if (is_missing){
 		log_error("no policy found");
-		EXIT_FAILURE;
+		return false;
 	}
 
 	
@@ -653,10 +442,10 @@ int main(int argc, char const *argv[])
 {
 
 
-	void *context = zmq_ctx_new ();
-	void *updater = zmq_socket (context, ZMQ_DEALER);
-	void *listener = zmq_socket (context, ZMQ_REP);
-	void *backend = zmq_socket (context, ZMQ_ROUTER);
+	void *context = zmq_ctx_new();
+	void *updater = zmq_socket(context, ZMQ_DEALER);
+	void *listener = zmq_socket(context, ZMQ_REP);
+	void *backend = zmq_socket(context, ZMQ_ROUTER);
 
 	char conn_str[100];
 	char identity [128];
@@ -671,13 +460,13 @@ int main(int argc, char const *argv[])
 	get_inst_id(rid);
 
 
-	zmq_setsockopt (updater, ZMQ_IDENTITY, identity, sizeof(identity));
+	zmq_setsockopt(updater, ZMQ_IDENTITY, identity, sizeof(identity));
 	sprintf(conn_str, "tcp://%s:%d", CTR_IP, CTR_PORT);
   	log_info("connect to ctr: %s", conn_str);
 	zmq_connect (updater, conn_str);
 
 	zmq_bind (backend, "inproc://diskmonitor");
-	log_info("start disk monitor");
+	// log_info("start disk monitor");
 
 	sprintf(conn_str, "tcp://*:%d", GUARD_PORT);
 	zmq_bind (listener, conn_str);
@@ -696,14 +485,13 @@ int main(int argc, char const *argv[])
 	log_info("register to ctr");
 
 	// pthread_t th_disk_monitor;
-	// pthread_t th_state;
-	// pthread_t th_test;
+
 
 
 	while (1) {
 		zmq_poll (items, 3, -1);
 
-		if (items [0].revents & ZMQ_POLLIN) {
+		if (items[0].revents & ZMQ_POLLIN) {
 			
 			zmq_msg_t buf;
 			int msg_size;
@@ -751,7 +539,7 @@ int main(int argc, char const *argv[])
 
 
 		}
-		if (items [1].revents & ZMQ_POLLIN) {
+		if (items[1].revents & ZMQ_POLLIN) {
 			
 
 			zmq_msg_t buf;
@@ -822,12 +610,8 @@ int main(int argc, char const *argv[])
 				char* info[6];
 				split_str(meta, ":", info);
 
-				unsigned ev_hash = 0; 
-				ev_hash = djb2hash(guard_id, event, info[0], info[1]);
-			
+				unsigned ev_hash = djb2hash(guard_id, event, info[0], info[1]);
 				int ev_id = get_event_id(ev_hash);
-	
-				printf("%u, %d\n", ev_hash, ev_id);
 
 				if (strncmp(EVENT_GET, event, EVENT_LEN) == 0){
 					
@@ -869,7 +653,7 @@ int main(int argc, char const *argv[])
 
 		}
 
-		if (items [2].revents & ZMQ_POLLIN) {
+		if (items[2].revents & ZMQ_POLLIN) {
 
 			zmq_msg_t buf;
 			int msg_size;

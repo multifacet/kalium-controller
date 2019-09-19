@@ -4,9 +4,9 @@
 using namespace rapidjson;
 using namespace std;
 
-static node_t* comm_graph;
 
-static pthread_mutex_t lock_x;
+
+// static pthread_mutex_t lock_x;
 
 const int policy_table = 0;
 const int policy_local_table = 1;
@@ -23,7 +23,6 @@ khash_t(policy_local_table)* ptr_policy_local_table = kh_init(policy_local_table
 khash_t(guard_sts_table)* ptr_guard_sts_table = kh_init(guard_sts_table);
 khash_t(event_mapping_table)* ptr_event_mapping_table = kh_init(event_mapping_table);
 
-list* guard_status;
 
 static list_node* ptr_curr_state;
 static list_node* ptr_list_head;
@@ -34,13 +33,13 @@ char* get_app_name(){
 	return out;
 }
 
-long int get_time(void) {
+unsigned long get_time(void) {
 	
 	struct timeval tv;
 
 	gettimeofday(&tv,NULL);
 	//return (((long int)tv.tv_sec)*1000)+(tv.tv_usec/1000);
-	return (long int)1000000 * tv.tv_sec + tv.tv_usec;
+	return (unsigned long)1000000 * tv.tv_sec + tv.tv_usec;
 }
 
 keys_t gen_key_pair()
@@ -73,8 +72,11 @@ int load_policy(char* fname, char* buffer)
 int get_event_id(unsigned long event_hash)
 {
 	khiter_t idx;
-	int eid;
+	int is_missing;
+	int eid = -1;
 	idx = kh_get(event_mapping_table, ptr_event_mapping_table, event_hash);
+	is_missing = (idx == kh_end(ptr_event_mapping_table));
+	if (is_missing) return eid;
 	eid = kh_value(ptr_event_mapping_table, idx);
 	return eid;
 }
@@ -97,7 +99,6 @@ void policy_init() {
 		nptr->ctr = nptr->loop_cnt;
 		ptr = ptr->next;
 	}
-
 	ptr_curr_state = ptr_list_head;
 }
 
@@ -105,15 +106,12 @@ void policy_init() {
 void init_comm_graph(char* fname) 
 {
 	char* policy_buf = (char*) calloc(1024 * 1024 * 1024, sizeof(char));
-
 	memset(policy_buf, '\0', sizeof(policy_buf));
-
 	load_policy(fname, policy_buf);
+
 
 	Document doc;
 	doc.Parse(policy_buf);
-
-
 	Value& name = doc["NAME"];
 	char* app_name = (char*) calloc(name.GetStringLength() + 1, sizeof(char));
 	memcpy(app_name, name.GetString(), name.GetStringLength()); 
@@ -211,9 +209,6 @@ void init_comm_graph(char* fname)
 	 	kh_set(policy_local_table, h_local, func_name, local_policy);
 	}
 
-
-	
-
 }
 
 
@@ -245,7 +240,7 @@ bool check_policy(int event_id){
 	int is_missing = (k == kh_end(ptr_policy_table));
 	if (is_missing){
 		log_error("no policy found");
-		EXIT_FAILURE;
+		return false;
 	}
 
 	
@@ -279,32 +274,21 @@ bool check_policy(int event_id){
 
 
 
-void register_guard(void* context, char_t* recv_msg, msg_str_buff_t* msg_buff)
+void register_guard(void* context, char* recv_msg, msg_str_buff_t* msg_buff)
 {
 
 
 	char* guard_id = recv_msg;
-
-	// int index = find_guard_keys(comm_graph, 5, guard_id);
-
-
-	// node_t* cur = comm_graph + index;
-
 	keys_t tmp_k  = gen_key_pair();
-
 	int body_len = 32 + 64;
-
 
 	header_t hdr_t = init_msg_header(TYPE_KEY_DIST, ACTION_TEST, body_len);
 	char* msg_hdr = header_to_str(hdr_t);
-
 
 	char* msg_str = (char*) calloc (MSG_HDR_LEN + body_len + 1, sizeof(char));
 	memset(msg_str, '\0', MSG_HDR_LEN + body_len + 1);
 
 	char* pos = msg_str;
-
-
 
 	memcpy(pos, msg_hdr, MSG_HDR_LEN);
 
@@ -312,26 +296,8 @@ void register_guard(void* context, char_t* recv_msg, msg_str_buff_t* msg_buff)
 
 	memcpy(pos, keys_to_str(tmp_k), 96);
 
-
-	// for (int i = 0; i < cur->prev_cnt; i++){
-	// 	// printf("%s\n", cur->prev[i]->node_info.id);
-	// 	memcpy(pos + (i + 1 ) * 96, keys_to_str(cur->prev[i]->node_info.keys), 96);
-
-	// }
-
-	// printf("keys sent %d, %d\n", body_len, strlen(msg_str));
-	// print_hex_len(msg_str, MSG_HDR_LEN + body_len);
-	// s_send (context, msg_hdr);
-
 	msg_buff -> msg_str = msg_str;
 	msg_buff -> msg_len = MSG_HDR_LEN + body_len;
-
-
-
-	//       zmq_msg_t msg;
-	// int rc = zmq_msg_init_data (&msg, msg_body, msg_len, my_free, NULL); 
-	// assert (rc == 0);
-	//       rc = zmq_msg_send (&msg, context, 0); 
 
 }
 
@@ -352,7 +318,6 @@ void send_policy(void* context, char* recv_msg, msg_str_buff_t* msg_buff)
 	memset(msg_str, '\0', MSG_HDR_LEN + body_len + 1);
 	memcpy(msg_str, msg_hdr, MSG_HDR_LEN);
 	memcpy(msg_str + MSG_HDR_LEN, policy, body_len);
-
 
 	msg_buff -> msg_str = msg_str;
 	msg_buff -> msg_len = MSG_HDR_LEN + body_len;
@@ -400,56 +365,17 @@ void split_str(char* str, const char* sep, char* out[]){
 
 
 
-
-
-static int
-get_monitor_event (void *monitor, int *value, char **address)
-{
-	// First frame in message contains event number and value
-	zmq_msg_t msg;
-	zmq_msg_init (&msg);
-	if (zmq_msg_recv (&msg, monitor, 0) == -1)
-		return -1; // Interrupted, presumably
-	assert (zmq_msg_more (&msg));
-
-	uint8_t *data = (uint8_t *) zmq_msg_data (&msg);
-	uint16_t event = *(uint16_t *) (data);
-	if (value)
-		*value = *(uint32_t *) (data + 2);
-
-	// Second frame in message contains event address
-	zmq_msg_init (&msg);
-	if (zmq_msg_recv (&msg, monitor, 0) == -1)
-		return -1; // Interrupted, presumably
-	assert (!zmq_msg_more (&msg));
-
-	if (address) {
-		uint8_t *data = (uint8_t *) zmq_msg_data (&msg);
-		size_t size = zmq_msg_size (&msg);
-		*address = (char *) malloc (size + 1);
-		memcpy (*address, data, size);
-		(*address)[size] = 0;
-	}
-	return event;
-}
-
-
-
 static void * worker_routine (void *context) 
 {
 	//  Socket to talk to dispatcher
-	void *worker = zmq_socket (context, ZMQ_DEALER);
-	zmq_connect (worker, "inproc://workers");
+	void *worker = zmq_socket(context, ZMQ_DEALER);
+	zmq_connect(worker, "inproc://workers");
 
 
-	void *monitor = zmq_socket (context, ZMQ_PAIR);
-	zmq_connect (monitor, "inproc://monitor-client");
+	void *monitor = zmq_socket(context, ZMQ_PAIR);
+	zmq_connect(monitor, "inproc://monitor-client");
 
-	int test_flag = 0;
-	// zmq_pollitem_t items [] = { 
-	// 	{ worker, 0, ZMQ_POLLIN, 0 },
-	// 	{ monitor, 0, ZMQ_POLLIN, 0 }
-	// };
+
 
 	zmq_pollitem_t items [] = { 
 		{ worker, 0, ZMQ_POLLIN, 0 },
@@ -457,14 +383,11 @@ static void * worker_routine (void *context)
 	};
 
 
-	long int st = get_time();
 	zmq_msg_t gid;
-	zmq_msg_init (&gid);
-	int send_flag = 0;
+	zmq_msg_init(&gid);
+
 
 	while (1) {
-		// long int cur_tm = get_time() - st;
-		// printf("%d\n", cur_tm);
 		zmq_poll (items, 1, -1);
 
 		if (items [0].revents & ZMQ_POLLIN) {
@@ -473,12 +396,11 @@ static void * worker_routine (void *context)
 			zmq_msg_t recv_frame;
 
 
-			zmq_msg_init (&id);
-			zmq_msg_init (&recv_frame);
+			zmq_msg_init(&id);
+			zmq_msg_init(&recv_frame);
 
-
-			int rc1 = zmq_msg_recv (&id, worker, 0);
-			int rc2 = zmq_msg_recv (&recv_frame, worker, 0);
+			int rc1 = zmq_msg_recv(&id, worker, 0);
+			int rc2 = zmq_msg_recv(&recv_frame, worker, 0);
 
 			zmq_msg_copy (&gid, &id);
 
@@ -486,11 +408,8 @@ static void * worker_routine (void *context)
 
 
 			msg_t recv_msg = msg_parser(buf);
-			char_t type = recv_msg.header.type;
-			char_t action = recv_msg.header.action;
-
-
-
+			char type = recv_msg.header.type;
+			char action = recv_msg.header.action;
 
 			char* msg_str;
 			msg_str_buff_t msg_str_buff;
@@ -502,9 +421,6 @@ static void * worker_routine (void *context)
 					log_info("guard registration");
 					break;
 
-				case TYPE_INFO:
-					continue;
-					
 				case TYPE_POLICY:
 					{
 
@@ -531,7 +447,7 @@ static void * worker_routine (void *context)
 						split_str(recv_msg.body, ":", info);
 
 						unsigned ev_hash = 0; 
-						
+
 						ev_hash = djb2hash(info[0], info[1], info[2], info[3]);
 						int ev_id = get_event_id(ev_hash);						
 						check_policy(ev_id);
@@ -551,10 +467,6 @@ static void * worker_routine (void *context)
 
 					}
 
-				case TYPE_CHECK_STATUS:
-
-					continue;
-
 				case TYPE_CHECK_EVENT:
 					{
 
@@ -562,12 +474,9 @@ static void * worker_routine (void *context)
 						char* info[9];
 						split_str(recv_msg.body, ":", info);
 
-						unsigned ev_hash = 0; 
-						ev_hash = djb2hash(info[0], info[1], info[2], info[3]);
+						unsigned ev_hash = djb2hash(info[0], info[1], info[2], info[3]);
 			
 						int ev_id = get_event_id(ev_hash);
-	
-						printf("%u, %d\n", ev_hash, ev_id);
 
 						
 						if (check_policy(ev_id)) {
@@ -586,8 +495,11 @@ static void * worker_routine (void *context)
 
 
 					}
+
+				case TYPE_INFO:
+				case TYPE_CHECK_STATUS:
 				case TYPE_TEST:
-					printf("test\n");
+					/* example user commands */
 					continue;
 
 				default:
@@ -597,19 +509,13 @@ static void * worker_routine (void *context)
 
 
 			zmq_msg_t resp_msg;
-			// printf("ready to send %d\n", msg_str_buff.msg_len);
-			int rc = zmq_msg_init_data (&resp_msg, msg_str_buff.msg_str, msg_str_buff.msg_len , NULL, NULL); 
-			// assert (rc == 0);
 
-			// printf("ready to send %d\n", msg_str_buff.msg_len);
-			// int size = s_send_len (context, msg_body, 10 + msg_len);
+			int rc = zmq_msg_init_data(&resp_msg, msg_str_buff.msg_str, msg_str_buff.msg_len , NULL, NULL); 
+			// assert (rc == 0);
 
 			rc = zmq_msg_send(&id, worker, ZMQ_SNDMORE);
 			rc = zmq_msg_send(&resp_msg, worker, 0); 
-			// printf("send1, %s, %d\n", (char*) zmq_msg_data(&id), rc);
-
 			zmq_msg_close (&resp_msg);
-
 
 			free(recv_msg.body);
 
@@ -629,28 +535,25 @@ int main(int argc, char const *argv[])
 	*/
 	int worker_no = 10;
 	char policy_name[64];
+	char conn_str[100];
 	strncpy(policy_name, argv[1], strlen(argv[1]));
 	init_comm_graph(policy_name);
 	log_info("init policy %s; local graphs for %d funcs", policy_name, kh_size(ptr_policy_local_table));
 
-
-	guard_status = list_init();
-
 	void *context = zmq_ctx_new ();
 
-	/* Socket to talk to clients */
-	void *ctr = zmq_socket (context, ZMQ_ROUTER);
-	char conn_str[100];
+	/* Socket to talk to the guards and the user */
+	void *ctr = zmq_socket(context, ZMQ_ROUTER);	
 	sprintf(conn_str, "tcp://*:%d", CTR_PORT);
 	zmq_bind (ctr, conn_str);
 	log_info("wait for guard: %s", conn_str);
 
 	/* Socket to talk to workers */
 	void *workers = zmq_socket (context, ZMQ_DEALER);
-	zmq_bind (workers, "inproc://workers");
+	zmq_bind(workers, "inproc://workers");
 	log_info("start %d workers", worker_no);
 
-	zmq_socket_monitor (ctr, "inproc://monitor-client", ZMQ_EVENT_ALL);
+	// zmq_socket_monitor(ctr, "inproc://monitor-client", ZMQ_EVENT_ALL);
 
 	/*  Launch pool of worker threads */
 	int thread_nbr;

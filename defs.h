@@ -93,30 +93,29 @@
 #define POLICY_TABLE_NOOP 3
 
 
-typedef char char_t;
 
 typedef struct header
 {
-	char_t type;
-	char_t action;
-	char_t len[MAX_LEN_SIZE + 1];
+	char type;
+	char action;
+	char len[MAX_LEN_SIZE + 1];
 	
 }header_t;
 
 typedef struct msg
 {
 	header_t header;
-	char_t signature[64];
-	char_t* body;
+	char signature[64];
+	char* body;
 	 
 }msg_t;
 
 
 typedef struct msg_str
 {
-	char_t header[10];
-	char_t signature[64];
-	char_t* body;
+	char header[10];
+	char signature[64];
+	char* body;
 	 
 }msg_str_t;
 
@@ -137,7 +136,7 @@ typedef struct keys
 
 typedef struct node_info
 {	
-	char_t id[MAX_ID_LEN];
+	char id[MAX_ID_LEN];
 }node_info_t;
 
 
