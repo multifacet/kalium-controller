@@ -24,12 +24,12 @@ KHASH_MAP_INIT_STR(io_whitelist, int)
 KHASH_MAP_INIT_STR(policy_table, list*)
 KHASH_MAP_INIT_INT64(event_mapping_table, int)
 
-khash_t(state_table)* ptr_state_table = kh_init(state_table);
-khash_t(io_whitelist)* ptr_io_whitelist = kh_init(io_whitelist);
-khash_t(ip_whitelist)* ptr_ip_whitelist = kh_init(ip_whitelist);
-khash_t(url_whitelist)* ptr_url_whitelist = kh_init(url_whitelist);
-khash_t(policy_table)* ptr_policy_table = kh_init(policy_table);
-khash_t(event_mapping_table)* ptr_event_mapping_table = kh_init(event_mapping_table);
+khash_t(state_table) *ptr_state_table = kh_init(state_table);
+khash_t(io_whitelist) *ptr_io_whitelist = kh_init(io_whitelist);
+khash_t(ip_whitelist) *ptr_ip_whitelist = kh_init(ip_whitelist);
+khash_t(url_whitelist) *ptr_url_whitelist = kh_init(url_whitelist);
+khash_t(policy_table) *ptr_policy_table = kh_init(policy_table);
+khash_t(event_mapping_table) *ptr_event_mapping_table = kh_init(event_mapping_table);
 
 
 static state_t guard_state;
@@ -37,12 +37,12 @@ static state_t guard_state;
 static int ior = 0;
 static int netr = 0;
 
-static list_node* ptr_curr_state;
-static list_node* ptr_list_head;
+static list_node *ptr_curr_state;
+static list_node *ptr_list_head;
 
 // const struct uECC_Curve_t* curve = uECC_secp256r1();
 
-char* get_func_name(){
+char *get_func_name(){
 #ifdef DEBUG
 	char* out = "test0";
 	return out;
@@ -51,7 +51,7 @@ char* get_func_name(){
 #endif
 }
 
-char* get_region_name(){
+char *get_region_name(){
 #ifdef DEBUG
 	char* out = "AWS_EAST";
 	return out;
@@ -60,11 +60,11 @@ char* get_region_name(){
 #endif
 }
 
-void split_str(char* str, const char* sep, char* out[]){
+void split_str(char *str, const char *sep, char *out[])
+{
 	int i = 0;
-	char *p = strtok (str, sep);
-	while (p != NULL)
-	{
+	char *p = strtok(str, sep);
+	while (p != NULL) {
 	    out[i++] = p;
 	    p = strtok(NULL, sep);
 	}
@@ -72,7 +72,8 @@ void split_str(char* str, const char* sep, char* out[]){
 }
 
 
-void strip(char* str, char c) {
+void strip(char *str, char c) 
+{
     char *pr = str, *pw = str;
     while (*pr) {
         *pw = *pr++;
@@ -82,18 +83,11 @@ void strip(char* str, char c) {
 }
 
 
-bool starts_with(char *str, char *pre)
+
+void get_inst_id(char* inst_id)
 {
-    size_t lenpre = strlen(pre),
-           lenstr = strlen(str);
-    return lenstr < lenpre ? false : strncmp(pre, str, lenpre) == 0;
-}
 
-
-
-void get_inst_id(char* inst_id){
-
-	FILE * fp;
+	FILE *fp;
     int linecnt = 0;
     char line[512];
 
@@ -110,8 +104,8 @@ void get_inst_id(char* inst_id){
     while (fgets(line, sizeof(line), fp)) {
         linecnt += 1;
         if (linecnt != 8) continue;
-        char* ids[3];
-        const char* sep = "/";
+        char *ids[3];
+        const char *sep = "/";
         split_str(line, sep, ids);
         strncpy(inst_id, ids[2], 14);
         inst_id[14] = '\0';
@@ -120,7 +114,8 @@ void get_inst_id(char* inst_id){
     fclose(fp);
 }
 
-unsigned long get_time(void) {
+unsigned long get_time(void) 
+{
     struct timeval tv;
     gettimeofday(&tv,NULL);
     return (unsigned long )1000000 * tv.tv_sec + tv.tv_usec;
@@ -138,20 +133,19 @@ int get_event_id(unsigned long event_hash)
 	return eid;
 }
 
-unsigned long djb2hash(char *func_name, char* event, char* url, char* action)
+unsigned long djb2hash(char *func_name, char *event, char *url, char *action)
 {	
 	int _len = strlen(func_name) + strlen(event) + strlen(url) + strlen(action) + 1;
-	char* hash_input = (char*)calloc(_len, sizeof(char));
+	char *hash_input = (char *)calloc(_len, sizeof(char));
 	snprintf(hash_input, _len, "%s%s%s%s", func_name, event, url, action);
     unsigned long hash = 5381;
-    int c = 0;
-
+    int c;
     while (c = *hash_input++)
         hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
     return hash;
 }
 
-void my_free (void *data, void *hint)
+void my_free(void *data, void *hint)
 {
 	free (data);
 }
@@ -165,13 +159,12 @@ void state_init()
 
 }
 
-int lookup(const int h_name, char* key)
+int lookup(const int h_name, char *key)
 {	
 
 	khiter_t k;
 	int is_missing;
-	switch(h_name)
-	{
+	switch (h_name) {
 
 		case io_whitelist: 
 			k =  kh_get(io_whitelist, ptr_io_whitelist, key);
@@ -196,13 +189,12 @@ int lookup(const int h_name, char* key)
 	return !is_missing;
 }
 
-void key_init_req(void* socket, char* guard_id)
+void key_init_req(void *socket, char *guard_id)
 {
 
-
-	char* msg_str = msg_init(guard_id);
+	char *msg_str = msg_init(guard_id);
 	zmq_msg_t msg; 
-	zmq_msg_init_data(&msg, msg_str, strlen(msg_str) , my_free, NULL); 
+	zmq_msg_init_data(&msg, msg_str, strlen(msg_str), my_free, NULL); 
 	zmq_msg_send(&msg, socket, 0); 
 	zmq_msg_close(&msg);
 
@@ -217,17 +209,17 @@ void key_init_handler(char* msg_body, int msg_body_len)
 }
 
 /* Send a message to the ctr */
-void send_to_ctr(void* socket, char msg_type, char action, char* data)
+void send_to_ctr(void *socket, char msg_type, char action, char *data)
 {
 	zmq_msg_t msg;
-	char* msg_str = msg_basic(msg_type, action, data);
+	char *msg_str = msg_basic(msg_type, action, data);
 	zmq_msg_init_data(&msg, msg_str, strlen(msg_str), NULL, NULL); 
 	zmq_msg_send(&msg, socket, 0); 
 	zmq_msg_close(&msg);
 }
 
 /* Send a message to the client */
-void send_to_client(void* socket, char* data)
+void send_to_client(void *socket, char *data)
 {
 
 	zmq_msg_t msg; 
@@ -239,50 +231,41 @@ void send_to_client(void* socket, char* data)
 
 
 
-void policy_init_handler(char* msg_body, int msg_body_len)
+void policy_init_handler(char *msg_body, int msg_body_len)
 {
 
-	khash_t(io_whitelist)* h_io = (khash_t(io_whitelist)*) ptr_io_whitelist;
-	khash_t(ip_whitelist)* h_ip = (khash_t(ip_whitelist)*) ptr_ip_whitelist;
-	khash_t(url_whitelist)* h_url = (khash_t(url_whitelist)*) ptr_url_whitelist;
+	khash_t(io_whitelist) *h_io = (khash_t(io_whitelist)*)ptr_io_whitelist;
+	khash_t(ip_whitelist) *h_ip = (khash_t(ip_whitelist)*)ptr_ip_whitelist;
+	khash_t(url_whitelist) *h_url = (khash_t(url_whitelist)*)ptr_url_whitelist;
 
 	Document doc;
 	doc.Parse(msg_body);
 
-
 	ior =  doc["IOR"].GetInt();
 	netr =  doc["NETR"].GetInt();
 
+
 	Value& fs = doc["IO"];
-
 	for (SizeType i = 0; i < fs.Size(); i++) {
-
-		char* buf = (char*) calloc(fs[i].GetStringLength() + 1, sizeof(char));
+		char *buf = (char *)calloc(fs[i].GetStringLength() + 1, sizeof(char));
 		memcpy(buf, fs[i].GetString(), fs[i].GetStringLength()); 
-
 		kh_set(io_whitelist, h_io, buf, 1);
 
 	}
 
 
 	Value& ips = doc["IP"];
-
 	for (SizeType i = 0; i < ips.Size(); i++) {
-
-		char* buf = (char*) calloc(ips[i].GetStringLength() + 1, sizeof(char));
+		char *buf = (char *)calloc(ips[i].GetStringLength() + 1, sizeof(char));
 		memcpy(buf, ips[i].GetString(), ips[i].GetStringLength()); 
-
 		kh_set(ip_whitelist, h_ip, buf, 1);
 	}
 
 
 	Value& urls = doc["URL"];
-
 	for (SizeType i = 0; i < urls.Size(); i++) {
-
-		char* buf = (char*) calloc(urls[i].GetStringLength() + 1, sizeof(char));
+		char *buf = (char *)calloc(urls[i].GetStringLength() + 1, sizeof(char));
 		memcpy(buf, urls[i].GetString(), urls[i].GetStringLength()); 
-
 		kh_set(url_whitelist, h_url, buf, 1);
 
 	}
@@ -291,23 +274,16 @@ void policy_init_handler(char* msg_body, int msg_body_len)
 
 	Value& policy = doc["GRAPH"];
 	Value& name = policy["NAME"];
-	char* func_name = (char*) calloc(name.GetStringLength() + 1, sizeof(char));
+	char *func_name = (char *) calloc(name.GetStringLength() + 1, sizeof(char));
 	memcpy(func_name, name.GetString(), name.GetStringLength()); 
-	
-
-	
 	Value& event_ids = policy["EVENTID"];
-
-	khash_t(event_mapping_table)* h = (khash_t(event_mapping_table)*) ptr_event_mapping_table;
+	khash_t(event_mapping_table) *h = (khash_t(event_mapping_table) *)ptr_event_mapping_table;
 
 
 	for (SizeType i = 0; i < event_ids.Size(); i++) {
 		Value& tmp = event_ids[i];
-
 		unsigned long k = tmp["h"].GetInt64();
-		int v = tmp["e"].GetInt();	
-
-
+		int v = tmp["e"].GetInt();
 		int ret;
 		khiter_t idx;
 		idx = kh_put(event_mapping_table, h, k, &ret);
@@ -317,7 +293,7 @@ void policy_init_handler(char* msg_body, int msg_body_len)
 
 	
 
-	list* graph = list_init();
+	list *graph = list_init();
 	Value& ns = policy["ns"];
 	Value& es = policy["es"];
 
@@ -325,36 +301,36 @@ void policy_init_handler(char* msg_body, int msg_body_len)
 	for (SizeType i = 0; i < ns.Size(); i++) {
 		
 		Value& node = ns[i];
-		Node* tnode = (Node*) malloc(sizeof(struct node));;
+		Node* tnode = (Node *) malloc(sizeof(struct node));;
 		tnode->id = node["id"].GetInt();
 		tnode->next_cnt = 0;
 		tnode->loop_cnt = node["cnt"].GetInt();
-		list_append(graph, (void*)tnode);
+		list_append(graph, (void *)tnode);
 	}
 
 	for (SizeType i = 0; i < es.Size(); i++) {
 		Value& dsts = es[i]["1"];
 		int src = es[i]["0"].GetInt();
-		node* p_ns = (node*)list_get_element(graph, src+1);
+		node *p_ns = (node*)list_get_element(graph, src+1);
 		for (SizeType j = 0; j < dsts.Size(); j++) {
 			int dst = dsts[j].GetInt();
 
 			if (dst != -1) {
-				list* p_nd = (list*)list_get_pointer(graph, dst+1);
-				p_ns -> successors[p_ns->next_cnt] = p_nd;
-				p_ns -> next_cnt =  p_ns -> next_cnt + 1;
+				list *p_nd = (list *)list_get_pointer(graph, dst+1);
+				p_ns->successors[p_ns->next_cnt] = p_nd;
+				p_ns->next_cnt = p_ns->next_cnt + 1;
 			}
 			else {
 
-				p_ns -> successors[p_ns->next_cnt] = graph;
-				p_ns -> next_cnt =  p_ns -> next_cnt + 1;
+				p_ns->successors[p_ns->next_cnt] = graph;
+				p_ns->next_cnt =  p_ns->next_cnt + 1;
 			}
 			;
 		}
 
 	}
 
-	khash_t(policy_table)* h_policy = (khash_t(policy_table)*) ptr_policy_table;
+	khash_t(policy_table) *h_policy = (khash_t(policy_table) *)ptr_policy_table;
 	kh_set(policy_table, h_policy, func_name, graph);
 
 	ptr_curr_state = graph;
@@ -370,18 +346,18 @@ void policy_init_handler(char* msg_body, int msg_body_len)
 
 void policy_init() {
 
-	list_node* ptr = ptr_list_head->next;
+	list_node *ptr = ptr_list_head->next;
 	while (ptr != ptr_list_head) {
-		node* nptr = (node*) ptr-> data;
+		node *nptr = (node *)ptr->data;
 		nptr->ctr = nptr->loop_cnt;
 		ptr = ptr->next;
 	}
-
 	ptr_curr_state = ptr_list_head;
 }
 
-bool check_policy(int event_id){
 
+
+bool check_policy(int event_id){
 
 	khiter_t k;
 	k =  kh_get(policy_table, ptr_policy_table, get_func_name());
@@ -392,14 +368,14 @@ bool check_policy(int event_id){
 	}
 
 	
-	list_node* ptr = ptr_curr_state;
+	list_node *ptr = ptr_curr_state;
 	if (ptr == ptr_list_head) {
 		policy_init();
-		ptr_curr_state = ptr_curr_state-> next;
+		ptr_curr_state = ptr_curr_state->next;
 		ptr = ptr_curr_state;
 	}
 	
-	node* nptr = (node*) ptr-> data;
+	node *nptr = (node *)ptr->data;
 	// log_info("%d, %d, %d", event_id, nptr->id, nptr->ctr);
 
 	if (nptr->id == event_id) {
@@ -411,8 +387,8 @@ bool check_policy(int event_id){
 	}
 	
 	for (int i = 0; i < nptr->next_cnt; i++){
-		list_node* next_ptr = nptr -> successors[i];
-		node* next_d_ptr = (node*) next_ptr->data;
+		list_node *next_ptr = nptr->successors[i];
+		node *next_d_ptr = (node *)next_ptr->data;
 
 		if ((next_d_ptr->ctr > 0) && (next_d_ptr->id == event_id)) {
 			next_d_ptr->ctr -= 1;
@@ -440,10 +416,10 @@ int main(int argc, char const *argv[])
 
 	char conn_str[100];
 	char identity [128];
-	char* guard_id = get_func_name();
+	char *guard_id = get_func_name();
 
 	memset(identity, '\0', sizeof(identity));
-	sprintf (identity, "%s%ld", guard_id, get_time());
+	sprintf(identity, "%s%ld", guard_id, get_time());
 	strip(identity, '-');
 
 	char rid[16];
@@ -490,7 +466,7 @@ int main(int argc, char const *argv[])
 			msg_size = zmq_msg_size(&buf);
 			if (msg_size <= 1) continue;
 
-			msg_t recv_msg = msg_parser((char*) zmq_msg_data (&buf));
+			msg_t recv_msg = msg_parser((char *)zmq_msg_data(&buf));
 			char type = recv_msg.header.type;
 			char action = recv_msg.header.action;
 
@@ -550,13 +526,13 @@ int main(int argc, char const *argv[])
     		zmq_msg_t resp; 
     		char* out;
 
-			zmq_msg_init (&buf);
-			zmq_msg_recv (&buf, listener, 0);
+			zmq_msg_init(&buf);
+			zmq_msg_recv(&buf, listener, 0);
 			msg_size = zmq_msg_size(&buf);
 
 			if (msg_size <= 1) continue;
 
-			char* tmp = (char*) zmq_msg_data (&buf);
+			char *tmp = (char *)zmq_msg_data(&buf);
 			char event[EVENT_LEN+1] = {'\0'};
 			strncpy(event, tmp, EVENT_LEN);
 				
@@ -565,8 +541,8 @@ int main(int argc, char const *argv[])
 
 			
     		Document d;
-    		char* meta = NULL;
-    		char* data = NULL;
+    		char *meta = NULL;
+    		char *data = NULL;
     		d.Parse(body);
 
     		if (strncmp(EVENT_CHECK, event, EVENT_LEN) == 0) {
@@ -577,7 +553,7 @@ int main(int argc, char const *argv[])
 				continue;	
 			}
 
-    		if (!d.IsObject()){
+    		if (!d.IsObject()) {
     			log_error("message is not an valid json object!");
     			char error_info[] = "no object";
     			send_to_client(listener, error_info);
@@ -597,30 +573,30 @@ int main(int argc, char const *argv[])
 				Value& meta_t = d["meta"];
 				Value& data_t = d["data"];
 
-				meta = (char*)calloc(strlen(meta_t.GetString()) + 1, sizeof(char));
+				meta = (char *)calloc(strlen(meta_t.GetString()) + 1, sizeof(char));
 				strncpy(meta, meta_t.GetString(), strlen(meta_t.GetString()));
 
-				out = (char*)calloc(strlen(meta) + strlen(guard_id) + strlen(event) + strlen(rid) + 4, sizeof(char));    
+				out = (char *)calloc(strlen(meta) + strlen(guard_id) + strlen(event) + strlen(rid) + 4, sizeof(char));    
 				sprintf(out, "%s:%s:%s:%s", guard_id, event, meta, rid);
 				
 				/* 
 				* 0 --> url; 1 --> method; 2 --> ip; 3 --> port; 
 				* 4 --> has_body; 5 --> request id
 				*/
-				char* info[6];
+				char *info[6];
 				split_str(meta, ":", info);
 
 				unsigned ev_hash = djb2hash(guard_id, event, info[0], info[1]);
 				int ev_id = get_event_id(ev_hash);
 
 
-				if (strncmp(EVENT_GET, event, EVENT_LEN) == 0){
+				if (strncmp(EVENT_GET, event, EVENT_LEN) == 0) {
 					
 					send_to_ctr(updater, TYPE_CHECK_EVENT, ACTION_NOOP, out);
 					
 				}
 
-				else if (strncmp(EVENT_END, event, EVENT_LEN) == 0){
+				else if (strncmp(EVENT_END, event, EVENT_LEN) == 0) {
 					policy_init();
 					send_to_client(listener, EMPTY);
 					send_to_ctr(updater, TYPE_EVENT, ACTION_NOOP, out);
@@ -628,7 +604,7 @@ int main(int argc, char const *argv[])
 				}
 
 				else if ((strncmp(EVENT_SEND, event, EVENT_LEN) == 0) || 
-					(strncmp(EVENT_RESP, event, EVENT_LEN) == 0)){
+					(strncmp(EVENT_RESP, event, EVENT_LEN) == 0)) {
 				   
 					
 					if (check_policy(ev_id)) {

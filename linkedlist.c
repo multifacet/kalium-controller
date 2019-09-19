@@ -3,7 +3,7 @@
 list *list_init()
 { 
 	list* L;
-  	L = (list*)malloc(sizeof(list_node));
+  	L = (list *)malloc(sizeof(list_node));
   	if (L != NULL) {
   		L->next = L->prev = L;
   		return L;
