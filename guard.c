@@ -417,13 +417,13 @@ bool check_policy(int event_id){
 	}
 	
 	node* nptr = (node*) ptr-> data;
+	// log_info("%d, %d, %d", event_id, nptr->id, nptr->ctr);
 
-	if (nptr->ctr > 0) {
-		if (nptr->id == event_id) {
+	if (nptr->id == event_id) {
+		if (nptr->ctr > 0) {
 			nptr->ctr -= 1;
 			return true;
 		}
-		
 		return false;
 	}
 	
@@ -655,7 +655,6 @@ int main(int argc, char const *argv[])
 						send_to_ctr(updater, TYPE_EVENT, ACTION_NOOP, out); 
 					}
 					else {
-
 						char dec[] = "DENY";
 						send_to_client(listener, dec);
 						send_to_ctr(updater, TYPE_EVENT, ACTION_NOOP, out); 

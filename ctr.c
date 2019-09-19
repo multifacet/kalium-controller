@@ -232,11 +232,23 @@ void my_free (void *data, void *hint)
 	free (data);
 }
 
+void policy_reset_test() {
+
+	#ifdef DEBUG
+	if ((((node*)ptr_curr_state->data)->ctr == 0) && 
+		(ptr_curr_state->next == ptr_list_head)) {
+		policy_init();
+	}
+
+	#endif 
+	return;
+
+}
+
 bool check_policy(int event_id){
 
 
 	khiter_t k;
-	bool ret = false;
 	k =  kh_get(policy_table, ptr_policy_table, get_app_name());
 	int is_missing = (k == kh_end(ptr_policy_table));
 	if (is_missing){
@@ -244,6 +256,7 @@ bool check_policy(int event_id){
 		return false;
 	}
 
+	
 	list_node* ptr = ptr_curr_state;
 	if (ptr == ptr_list_head) {
 		policy_init();
@@ -252,15 +265,15 @@ bool check_policy(int event_id){
 	}
 	
 	node* nptr = (node*) ptr-> data;
+	// log_info("%d, %d, %d", event_id, nptr->id, nptr->ctr);
 
-	if (nptr->ctr > 0) {
-		if (nptr->id == event_id) {
+	if (nptr->id == event_id) {
+		if (nptr->ctr > 0) {
 			nptr->ctr -= 1;
-			ret = true;
+			policy_reset_test();
+			return true;
 		}
-		else {
-			ret = false;
-		}
+		return false;
 	}
 	
 	for (int i = 0; i < nptr->next_cnt; i++){
@@ -268,20 +281,14 @@ bool check_policy(int event_id){
 		node* next_d_ptr = (node*) next_ptr->data;
 
 		if ((next_d_ptr->ctr > 0) && (next_d_ptr->id == event_id)) {
-				next_d_ptr->ctr -= 1;
-				ptr_curr_state = next_ptr;
-				ret = true;
+			next_d_ptr->ctr -= 1;
+			ptr_curr_state = next_ptr;
+			policy_reset_test();
+			return true;
 		}
 	}
 
-#ifdef DEBUG
-	if ((((node*)ptr_curr_state->data)->ctr == 0) && 
-		(ptr_curr_state->next == ptr_list_head)) {
-		policy_init();
-	}
-
-#endif 
-	return ret;
+	return false;
 }
 
 
