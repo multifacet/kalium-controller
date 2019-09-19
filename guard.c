@@ -32,7 +32,7 @@ khash_t(policy_table)* ptr_policy_table = kh_init(policy_table);
 khash_t(event_mapping_table)* ptr_event_mapping_table = kh_init(event_mapping_table);
 
 
-
+static state_t guard_state;
 
 static int ior = 0;
 static int netr = 0;
@@ -140,7 +140,6 @@ void get_inst_id(char* inst_id){
 unsigned long get_time(void) {
     struct timeval tv;
     gettimeofday(&tv,NULL);
-    //return (((long int)tv.tv_sec)*1000)+(tv.tv_usec/1000);
     return (unsigned long )1000000 * tv.tv_sec + tv.tv_usec;
 }
 
@@ -174,6 +173,14 @@ void my_free (void *data, void *hint)
 	free (data);
 }
 
+void state_init()
+{
+	guard_state.start_time = get_time();
+	guard_state.request_no = 0;
+	guard_state.io_no = 0;
+	guard_state.running_time = 0;
+
+}
 
 int lookup(const int h_name, char* key)
 {	
@@ -182,10 +189,6 @@ int lookup(const int h_name, char* key)
 	int is_missing;
 	switch(h_name)
 	{
-		case state_table: 
-			k =  kh_get(state_table, ptr_state_table, key);
-			is_missing = (k == kh_end(ptr_state_table));
-			break;
 
 		case io_whitelist: 
 			k =  kh_get(io_whitelist, ptr_io_whitelist, key);
@@ -441,11 +444,11 @@ bool check_policy(int event_id){
 int main(int argc, char const *argv[])
 {
 
-
+	state_init();
 	void *context = zmq_ctx_new();
 	void *updater = zmq_socket(context, ZMQ_DEALER);
 	void *listener = zmq_socket(context, ZMQ_REP);
-	void *backend = zmq_socket(context, ZMQ_ROUTER);
+	// void *backend = zmq_socket(context, ZMQ_ROUTER);
 
 	char conn_str[100];
 	char identity [128];
@@ -463,20 +466,20 @@ int main(int argc, char const *argv[])
 	zmq_setsockopt(updater, ZMQ_IDENTITY, identity, sizeof(identity));
 	sprintf(conn_str, "tcp://%s:%d", CTR_IP, CTR_PORT);
   	log_info("connect to ctr: %s", conn_str);
-	zmq_connect (updater, conn_str);
+	zmq_connect(updater, conn_str);
 
-	zmq_bind (backend, "inproc://diskmonitor");
+	// zmq_bind(backend, "inproc://diskmonitor");
 	// log_info("start disk monitor");
 
 	sprintf(conn_str, "tcp://*:%d", GUARD_PORT);
-	zmq_bind (listener, conn_str);
+	zmq_bind(listener, conn_str);
 	log_info("wait for function: %s", conn_str);
 
 
 	zmq_pollitem_t items [] = { 
 		{ updater, 0, ZMQ_POLLIN, 0 }, 
 		{ listener, 0, ZMQ_POLLIN, 0 }, 
-		{ backend, 0, ZMQ_POLLIN, 0 }, 
+		// { backend, 0, ZMQ_POLLIN, 0 }, 
 	};
 
 
@@ -484,63 +487,74 @@ int main(int argc, char const *argv[])
 
 	log_info("register to ctr");
 
-	// pthread_t th_disk_monitor;
-
-
 
 	while (1) {
-		zmq_poll (items, 3, -1);
+		zmq_poll (items, 2, -1);
 
 		if (items[0].revents & ZMQ_POLLIN) {
 			
 			zmq_msg_t buf;
 			int msg_size;
 
-			zmq_msg_init (&buf);
-
-			zmq_msg_recv (&buf, updater, 0);
+			zmq_msg_init(&buf);
+			zmq_msg_recv(&buf, updater, 0);
 
 			msg_size = zmq_msg_size(&buf);
-
 			if (msg_size <= 1) continue;
 
 			msg_t recv_msg = msg_parser((char*) zmq_msg_data (&buf));
 			char type = recv_msg.header.type;
 			char action = recv_msg.header.action;
 
+			switch (type) {
 
-			if (TYPE_KEY_DIST == type){
-				
-				key_init_handler(recv_msg.body, strtol(recv_msg.header.len, NULL, 16));
+				case TYPE_KEY_DIST:
+				{
+					key_init_handler(recv_msg.body, strtol(recv_msg.header.len, NULL, 16));
+					/* ask for policy*/
+					send_to_ctr(updater, TYPE_POLICY, ACTION_POLICY_INIT, guard_id);
+					break;
 
-				/* ask for policy*/
-				send_to_ctr(updater, TYPE_POLICY, ACTION_POLICY_INIT, guard_id); 
+				}
 
+				case TYPE_POLICY:
+				{
+					if (ACTION_POLICY_ADD == action) {
+						policy_init_handler(recv_msg.body, strtol(recv_msg.header.len, NULL, 16));
+						log_info("finish registration; get policy");
+					}
+					break;
+				}
 
-			}
-			else if ((TYPE_POLICY == type) && (ACTION_POLICY_ADD == action)){
-				
-				policy_init_handler(recv_msg.body, strtol(recv_msg.header.len, NULL, 16));
-				log_info("finish registration; get policy");
-				
-			}
+				case TYPE_CHECK_RESP:
+				{
+					log_info("get check resp %s", recv_msg.body);
+					send_to_client(listener, recv_msg.body);
+					break;
 
-			else if (TYPE_TEST == type){
-				log_info("handle test policy");
-
-				
-			}
-			else if (TYPE_CHECK_RESP == type){
-				
-				log_info("get check resp %s", recv_msg.body);
-				send_to_client(listener, recv_msg.body);
-				
+				}
+				case TYPE_CHECK_STATUS:
+				{
+					log_info("send status to ctr");
+					guard_state.running_time = get_time() - guard_state.start_time;
+					int a = snprintf(NULL, 0, "%d", guard_state.request_no);
+					int b = snprintf(NULL, 0, "%lu", guard_state.running_time);
+					char buf[a+b+2] = {'\0'};
+					sprintf(buf, "%d:%lu", guard_state.request_no,  guard_state.running_time);
+					send_to_ctr(updater, TYPE_CHECK_STATUS, ACTION_GD_RESP, buf);
+					break;
+				}
+				case TYPE_TEST:
+					break;
+				default:
+					break;
 			}
 
 
 		}
 		if (items[1].revents & ZMQ_POLLIN) {
 			
+			guard_state.request_no += 1;
 
 			zmq_msg_t buf;
 			int msg_size;
@@ -555,9 +569,8 @@ int main(int argc, char const *argv[])
 			if (msg_size <= 1) continue;
 
 			char* tmp = (char*) zmq_msg_data (&buf);
-			char event[EVENT_LEN+1] = {0};
+			char event[EVENT_LEN+1] = {'\0'};
 			strncpy(event, tmp, EVENT_LEN);
-			event[EVENT_LEN+1] = '\0';
 				
 			char* body = tmp + EVENT_LEN + 1;
 			body[msg_size - EVENT_LEN - 1] = '\0';
@@ -593,7 +606,6 @@ int main(int argc, char const *argv[])
 
     		else {
 
-    			
 				Value& meta_t = d["meta"];
 				Value& data_t = d["data"];
 
@@ -649,24 +661,6 @@ int main(int argc, char const *argv[])
 				free(out); /* zmq might free this automatically, causing double free */
 			}
 		
-			
-
-		}
-
-		if (items[2].revents & ZMQ_POLLIN) {
-
-			zmq_msg_t buf;
-			int msg_size;
-
-			zmq_msg_init (&buf);
-
-			zmq_msg_recv (&buf, backend, 0);
-
-			msg_size = zmq_msg_size(&buf);
-
-			if (msg_size <= 1) continue;
-
-			printf("get message %d, %s\n", msg_size, (char*) zmq_msg_data (&buf));
 		}
 
 	}

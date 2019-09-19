@@ -243,7 +243,6 @@ bool check_policy(int event_id){
 		return false;
 	}
 
-	
 	list_node* ptr = ptr_curr_state;
 	if (ptr == ptr_list_head) {
 		policy_init();
@@ -289,11 +288,8 @@ void register_guard(void* context, char* recv_msg, msg_str_buff_t* msg_buff)
 	memset(msg_str, '\0', MSG_HDR_LEN + body_len + 1);
 
 	char* pos = msg_str;
-
 	memcpy(pos, msg_hdr, MSG_HDR_LEN);
-
 	pos = msg_str + MSG_HDR_LEN;
-
 	memcpy(pos, keys_to_str(tmp_k), 96);
 
 	msg_buff -> msg_str = msg_str;
@@ -328,23 +324,13 @@ void send_policy(void* context, char* recv_msg, msg_str_buff_t* msg_buff)
 void check_resp(void* context, char* res, msg_str_buff_t* msg_buff)
 {
 
-
 	int body_len = strlen(res);
-
 	header_t hdr_t = init_msg_header(TYPE_CHECK_RESP, ACTION_TEST, body_len);
-
 	char* msg_hdr = header_to_str(hdr_t);
-
-
 	char* msg_str = (char*) calloc (MSG_HDR_LEN + body_len + 1, sizeof(char));
-
 	memset(msg_str, '\0', MSG_HDR_LEN + body_len + 1);
-
-
 	memcpy(msg_str, msg_hdr, MSG_HDR_LEN);
-
 	memcpy(msg_str + MSG_HDR_LEN, res, body_len);
-
 
 	msg_buff -> msg_str = msg_str;
 	msg_buff -> msg_len = MSG_HDR_LEN + body_len;
@@ -383,8 +369,8 @@ static void * worker_routine (void *context)
 	};
 
 
-	zmq_msg_t gid;
-	zmq_msg_init(&gid);
+	zmq_msg_t cid;
+	zmq_msg_init(&cid);
 
 
 	while (1) {
@@ -402,10 +388,9 @@ static void * worker_routine (void *context)
 			int rc1 = zmq_msg_recv(&id, worker, 0);
 			int rc2 = zmq_msg_recv(&recv_frame, worker, 0);
 
-			zmq_msg_copy (&gid, &id);
+			zmq_msg_copy(&cid, &id);
 
 			char* buf = (char*) zmq_msg_data(&recv_frame);
-
 
 			msg_t recv_msg = msg_parser(buf);
 			char type = recv_msg.header.type;
@@ -445,23 +430,36 @@ static void * worker_routine (void *context)
 
 						char* info[9];
 						split_str(recv_msg.body, ":", info);
+						char event[EVENT_LEN+1] = {'\0'};
+						strncpy(event, info[1], EVENT_LEN);
 
-						unsigned ev_hash = 0; 
 
-						ev_hash = djb2hash(info[0], info[1], info[2], info[3]);
+						unsigned ev_hash = djb2hash(info[0], info[1], info[2], info[3]);
 						int ev_id = get_event_id(ev_hash);						
 						check_policy(ev_id);
 
 
 						zmq_msg_t resp_msg;
-						char done[] = "0";
-						zmq_msg_init_data (&resp_msg, done, strlen(done) , NULL, NULL); 
-
+						char done[] = "";
+						zmq_msg_init_data(&resp_msg, done, strlen(done) , NULL, NULL); 
 						zmq_msg_send(&id, worker, ZMQ_SNDMORE);
 						zmq_msg_send(&resp_msg, worker, 0); 
-
 						zmq_msg_close (&resp_msg);
 						free(recv_msg.body);
+
+#ifdef DEBUG
+						if (strncmp(EVENT_END, event, EVENT_LEN) == 0){
+							log_info("test: get guard state");
+							zmq_msg_t resp_msg;
+							char* msg_str = msg_basic(TYPE_CHECK_STATUS, ACTION_CTR_REQ, "test");
+							zmq_msg_init_data(&resp_msg, msg_str, strlen(msg_str) , NULL, NULL); 
+							zmq_msg_send(&cid, worker, ZMQ_SNDMORE);
+							zmq_msg_send(&resp_msg, worker, 0); 
+							zmq_msg_close (&resp_msg);
+
+						}
+
+#endif 
 
 						continue;
 
@@ -495,12 +493,20 @@ static void * worker_routine (void *context)
 
 
 					}
-
-				case TYPE_INFO:
+				/* example user commands */
 				case TYPE_CHECK_STATUS:
-				case TYPE_TEST:
-					/* example user commands */
-					continue;
+					switch(action) {
+
+						case ACTION_USER: /* from user */
+							/* send TYPE_CHECK_STATUS + ACTION_CTR_REQ to guard */
+						case ACTION_GD_RESP: /* from guard */
+							log_info("get status info from guard %s", recv_msg.body);
+
+					}
+     				break;
+	  
+				case TYPE_USER_POLICY:
+					break;
 
 				default:
 					break;

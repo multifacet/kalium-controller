@@ -58,7 +58,7 @@
 #define TYPE_KEY_DIST 0x04
 #define TYPE_DISK 0x05
 #define TYPE_EVENT 0x06
-#define TYPE_DEP_POLICY 0x07
+#define TYPE_USER_POLICY 0x07
 #define TYPE_CHECK_STATUS 0x08
 #define TYPE_CHECK_EVENT 0x09
 #define TYPE_CHECK_RESP 0x10
@@ -66,11 +66,14 @@
 
 #define ACTION_NOOP 0x01
 #define ACTION_TEST 0x02
-#define ACTION_POLICY_ADD 0x03
-#define ACTION_POLICY_DEL 0x04
-#define ACTION_POLICY_UPDATE 0x05
-#define ACTION_POLICY_INIT 0x06
-#define ACTION_KEY_DIST 0x07
+#define ACTION_CTR_REQ 0x03
+#define ACTION_GD_RESP 0x04
+#define ACTION_USER 0x05
+#define ACTION_POLICY_ADD 0x06
+#define ACTION_POLICY_DEL 0x07
+#define ACTION_POLICY_UPDATE 0x08
+#define ACTION_POLICY_INIT 0x09
+#define ACTION_KEY_DIST 0x10
 
 
 #define STATE_REQ_RECIVED 0
@@ -141,12 +144,6 @@ typedef struct node_info
 
 
 
-
-// typedef struct graph {
-//     Node* begin;
-//     Node* nodes[];
-// } Graph;
-
 typedef struct event
 {	
 	char ename[5];
@@ -154,7 +151,18 @@ typedef struct event
 
 }event_t;
 
+typedef struct guard_state
+{	
+	/* 
+	* Can be extended to record No.of GETs 
+	* No. of POSTs, etc.
+	*/
+	int request_no;
+	int io_no;
+	unsigned long start_time;
+	unsigned long running_time;
 
+}state_t;
 
 typedef struct para_state_check
 {
