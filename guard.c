@@ -44,7 +44,7 @@ static list_node *ptr_list_head;
 
 char *get_func_name(){
 #ifdef DEBUG
-	char* out = "test0";
+	char *out = (char *)"test0";
 	return out;
 #else
 	return getenv("AWS_LAMBDA_FUNCTION_NAME");
@@ -53,7 +53,7 @@ char *get_func_name(){
 
 char *get_region_name(){
 #ifdef DEBUG
-	char* out = "AWS_EAST";
+	char *out = (char *)"AWS_EAST";
 	return out;
 #else
 	return getenv("AWS_REGION");
@@ -131,7 +131,7 @@ unsigned long djb2hash(char *func_name, char *event, char *url, char *action)
 	snprintf(hash_input, _len, "%s%s%s%s", func_name, event, url, action);
     unsigned long hash = 5381;
     int c;
-    while (c = *hash_input++)
+    while ((c = *hash_input++))
         hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
     return hash;
 }
@@ -248,8 +248,8 @@ void policy_init_handler(char *msg_body, int msg_body_len)
 	Document doc;
 	doc.Parse(msg_body);
 
-	ior =  doc["IOR"].GetInt();
-	netr =  doc["NETR"].GetInt();
+	ior = doc["IOR"].GetInt();
+	netr = doc["NETR"].GetInt();
 
 
 	Value& fs = doc["IO"];
@@ -503,7 +503,7 @@ int main(int argc, char const *argv[])
 				}
 				case TYPE_CHECK_STATUS:
 				{
-					
+
 					log_info("send status to ctr");
 					guard_state.running_time = get_time() - guard_state.start_time;
 					int a = snprintf(NULL, 0, "%d", guard_state.request_no);
@@ -527,9 +527,13 @@ int main(int argc, char const *argv[])
 
 			zmq_msg_t buf;
 			int msg_size;
-    		char* msg_str;
-    		zmq_msg_t resp; 
-    		char* out;
+
+    		/* 
+			* The event recvied from function contain three parts
+			* Type: first 4 bytes of the string indicate the action of the function
+			* Meta: URL + method + IP + port + if event has data + unique ID
+			* Data: Data in the event 
+			*/ 
 
 			zmq_msg_init(&buf);
 			zmq_msg_recv(&buf, listener, 0);
@@ -544,10 +548,8 @@ int main(int argc, char const *argv[])
 			char* body = tmp + EVENT_LEN + 1;
 			body[msg_size - EVENT_LEN - 1] = '\0';
 
-			
+
     		Document d;
-    		char *meta = NULL;
-    		char *data = NULL;
     		d.Parse(body);
 
     		if (strncmp(EVENT_CHECK, event, EVENT_LEN) == 0) {
@@ -572,8 +574,13 @@ int main(int argc, char const *argv[])
 
     		else {
 
-				Value& meta_t = d["meta"];
-				Value& data_t = d["data"];
+    			char *meta;
+    			char *out;
+				Value& meta_t = d["meta"]; 
+
+				/* The guard should extract data as a string. Not shown in this demo*/
+				// char *data;
+				// Value& data_t = d["data"];   
 
 				meta = (char *)calloc(strlen(meta_t.GetString()) + 1, sizeof(char));
 				strncpy(meta, meta_t.GetString(), strlen(meta_t.GetString()));
@@ -600,7 +607,7 @@ int main(int argc, char const *argv[])
 
 				else if (strncmp(EVENT_END, event, EVENT_LEN) == 0) {
 					policy_init();
-					send_to_client(listener, EMPTY);
+					send_to_client(listener, (char *)EMPTY);
 					send_to_ctr(updater, TYPE_EVENT, ACTION_NOOP, out);
 					
 				}

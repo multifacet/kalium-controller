@@ -45,6 +45,7 @@
 
 #define MAX_LEN_SIZE 8
 #define MAX_BODY_LEN 4294967295
+#define MAX_POLICY_LEN 1073741824
 
 #define MSG_HDR_LEN 10
 #define MSG_SIG_LEN 64

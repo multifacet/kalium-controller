@@ -187,8 +187,6 @@ int msg_verfy(msg_t msg, unsigned char* key_pub, const uECC_Curve_t* curve)
 	
 	sha256((const unsigned char *)msg.body, body_len, hash);
 
-
-	printf("msg_size_get %d, %d, %d\n", body_len, strlen(msg.body), sizeof(hash)); 	
  	// const struct uECC_Curve_t* curve1 = uECC_secp256r1();
  	
 	if (!uECC_verify(key_pub, hash, sizeof(hash), (unsigned char *)msg.signature, curve)) {

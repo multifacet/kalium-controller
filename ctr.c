@@ -78,7 +78,7 @@ void strip(char *str, char c)
 /* Do not handle multiple apps, only return default*/
 char *get_app_name()
 {
-	char *out = "default";
+	char *out = (char *)"default";
 	return out;
 }
 
@@ -113,7 +113,7 @@ unsigned long djb2hash(char *func_name, char *event, char *url, char *action)
 	snprintf(hash_input, _len, "%s%s%s%s", func_name, event, url, action);
     unsigned long hash = 5381;
     int c;
-    while (c = *hash_input++)
+    while ((c = *hash_input++))
         hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
     return hash;
 }
@@ -155,9 +155,9 @@ void policy_init() {
 
 /* Generate the graph policy */
 void init_comm_graph(char* fname) 
-{
-	char *policy_buf = (char *)calloc(1024 * 1024 * 1024, sizeof(char));
-	memset(policy_buf, '\0', sizeof(policy_buf));
+{	
+	char *policy_buf = (char *)calloc(MAX_POLICY_LEN, sizeof(char));
+	memset(policy_buf, '\0', MAX_POLICY_LEN);
 	load_policy(fname, policy_buf);
 
 
@@ -351,7 +351,7 @@ void send_to_guard(void *socket, zmq_msg_t id, char msg_type, char action, char 
 {	
 
 	zmq_msg_t msg;
-	char *msg_str = "";
+	char *msg_str = (char *) EMPTY;
 	if (data) msg_str = msg_basic(msg_type, action, data);
 	zmq_msg_init_data(&msg, msg_str, strlen(msg_str), NULL, NULL); 
 	zmq_msg_send(&id, socket, ZMQ_SNDMORE);
@@ -463,7 +463,8 @@ void *worker_routine(void *context)
 						/* Showcase push-like requests */
 						if (strncmp(EVENT_END, event, EVENT_LEN) == 0) {
 							log_info("test: get guard state");
-							send_to_guard(worker, cid, TYPE_CHECK_STATUS, ACTION_CTR_REQ, "test");
+							policy_init();
+							send_to_guard(worker, cid, TYPE_CHECK_STATUS, ACTION_CTR_REQ, (char *)"test");
 
 						}
 
@@ -485,10 +486,10 @@ void *worker_routine(void *context)
 						int ev_id = get_event_id(ev_hash);
 
 						if (check_policy(ev_id)) {
-							send_to_guard(worker, id, TYPE_CHECK_RESP, ACTION_TEST, "ALLOW");
+							send_to_guard(worker, id, TYPE_CHECK_RESP, ACTION_TEST, (char *)"ALLOW");
 						}
 						else {
-							send_to_guard(worker, id, TYPE_CHECK_RESP, ACTION_TEST, "DENY");
+							send_to_guard(worker, id, TYPE_CHECK_RESP, ACTION_TEST, (char *)"DENY");
 						}
 						break;
 
