@@ -13,7 +13,8 @@ const int policy_local_table = 1;
 const int guard_sts_table = 2;
 const int event_mapping_table = 3;
 
-KHASH_MAP_INIT_STR(policy_table, list*)
+/* Hash maps */
+KHASH_MAP_INIT_STR(policy_table, list*) 
 KHASH_MAP_INIT_STR(policy_local_table, char*)
 KHASH_MAP_INIT_STR(guard_sts_table, char*)
 KHASH_MAP_INIT_INT64(event_mapping_table, int)
@@ -117,7 +118,7 @@ unsigned long djb2hash(char *func_name, char *event, char *url, char *action)
     return hash;
 }
 
-
+/* Get event id based on event hash */
 int get_event_id(unsigned long event_hash)
 {
 	khiter_t idx;
@@ -140,6 +141,7 @@ char* get_local_policy(char *func_name)
 	return ptr;
 }
 
+/* Reset the loop count of policy*/
 void policy_init() {
 
 	list_node *ptr = ptr_list_head->next;
@@ -151,7 +153,7 @@ void policy_init() {
 	ptr_curr_state = ptr_list_head;
 }
 
-
+/* Generate the graph policy */
 void init_comm_graph(char* fname) 
 {
 	char *policy_buf = (char *)calloc(1024 * 1024 * 1024, sizeof(char));
@@ -162,10 +164,21 @@ void init_comm_graph(char* fname)
 	Document doc;
 	doc.Parse(policy_buf);
 	Value& name = doc["NAME"];
+	/* 
+	* The values stored in khash need to be points (for string) or int
+	* Shouldn't free them unless need modify or delete a policy
+	*/
 	char *app_name = (char *)calloc(name.GetStringLength() + 1, sizeof(char));
 	memcpy(app_name, name.GetString(), name.GetStringLength()); 
 
 
+	/* 
+	* An event = function_name + client event + HTTP URL + HTTP operation
+	* Event hash = djb2hash(event)
+	* The policy generator should assign each event (hash) a unique ID
+	* and record the mapping in the policy ["EVENTID"] field
+	* The ctr stores event mapping in event_mapping_table when processing a policy
+	*/
 	Value& event_ids = doc["EVENTID"];
 	khash_t(event_mapping_table) *h = (khash_t(event_mapping_table) *) ptr_event_mapping_table;
 
@@ -173,18 +186,19 @@ void init_comm_graph(char* fname)
 		Value& tmp = event_ids[i];
 		unsigned long k = tmp["h"].GetInt64();
 		int v = tmp["e"].GetInt();	
-		
 		int ret;
 		khiter_t idx;
 		idx = kh_put(event_mapping_table, h, k, &ret);
 		kh_value(h, idx) = v;
 	}
 
-	
+	/* Start to parse the global policy */
 	list *graph = list_init();
 	Value& g = doc["GLOBALGRAPH"];
 	Value& ns = g["ns"];
 	Value& es = g["es"];
+
+	/* Create nodes and use a double linked list to store the graph*/
 	for (SizeType i = 0; i < ns.Size(); i++) {
 		Value& node = ns[i];
 		Node* tnode = (Node *)malloc(sizeof(struct node));;
@@ -214,20 +228,21 @@ void init_comm_graph(char* fname)
 		}
 		log_debug("%d, %d", p_ns->id, p_ns->next_cnt);
 	}
-
+	/*Store global policy/call graph in a table */
 	khash_t(policy_table) *h_global = (khash_t(policy_table) *)ptr_policy_table;
 	kh_set(policy_table, h_global, app_name, graph);
 
 	ptr_curr_state = graph;
 	ptr_list_head = graph;
 
-
+	/* Store the policy (as a string) for each function */
 	Value& locals = doc["LOCALGRAPH"];
-	Value& url = doc["URL"];
-	Value& io = doc["IO"];
-	Value& ip = doc["IP"];
-	Value& ior = doc["IOR"];
-	Value& netr = doc["NETR"];
+	/*** We do not use the following policy in this demo ***/
+	Value& url = doc["URL"]; /* URL whitelist */
+	Value& io = doc["IO"]; /* IO whitelist */
+	Value& ip = doc["IP"]; /* IP whitelist */
+	Value& ior = doc["IOR"]; /* IO rate limits */
+	Value& netr = doc["NETR"]; /* network rate limits*/
 	Document tmpl;
 	tmpl.SetObject();
 	Document::AllocatorType& allocator = tmpl.GetAllocator();
@@ -259,16 +274,13 @@ void init_comm_graph(char* fname)
 
 }
 
-
-
-
-
-
+/* Required free function for zmq calls. */
 void my_free (void *data, void *hint)
 {
 	free (data);
 }
 
+/* Only for demo */
 void policy_reset_test() {
 
 	#ifdef DEBUG
@@ -292,7 +304,7 @@ bool check_policy(int event_id)
 		return false;
 	}
 
-	
+	/* Checks if the event is the first event received*/
 	list_node* ptr = ptr_curr_state;
 	if (ptr == ptr_list_head) {
 		policy_init();
@@ -302,7 +314,11 @@ bool check_policy(int event_id)
 	
 	node *nptr = (node*)ptr->data;
 	// log_info("%d, %d, %d", event_id, nptr->id, nptr->ctr);
-
+	/* 
+	* Check current node: if event id matches and loop counter is not zero
+	* If event id does not match, check the successor nodes to find the match node
+	* and proceed to that node
+	*/
 	if (nptr->id == event_id) {
 		if (nptr->ctr > 0) {
 			nptr->ctr -= 1;
@@ -327,7 +343,10 @@ bool check_policy(int event_id)
 	return false;
 }
 
-/* send a message to the guard */
+/* 
+* Send a message to the guard. Need to first select 
+* the connection based on ID and then send the message 
+*/
 void send_to_guard(void *socket, zmq_msg_t id, char msg_type, char action, char *data)
 {	
 
@@ -347,13 +366,13 @@ void send_to_guard(void *socket, zmq_msg_t id, char msg_type, char action, char 
 
 void *worker_routine(void *context) 
 {
-	//  Socket to talk to dispatcher
+	/* Socket to talk to dispatcher */
 	void *worker = zmq_socket(context, ZMQ_DEALER);
 	zmq_connect(worker, "inproc://workers");
 
 
-	void *monitor = zmq_socket(context, ZMQ_PAIR);
-	zmq_connect(monitor, "inproc://monitor-client");
+	// void *monitor = zmq_socket(context, ZMQ_PAIR);
+	// zmq_connect(monitor, "inproc://monitor-client");
 
 	zmq_pollitem_t items [] = { 
 		{ worker, 0, ZMQ_POLLIN, 0 },
@@ -370,16 +389,20 @@ void *worker_routine(void *context)
 
 		if (items[0].revents & ZMQ_POLLIN) {
 
-			zmq_msg_t id;
+			zmq_msg_t id; /* zmq generates an ID for each guard-ctr connection */
 			zmq_msg_t recv_frame;
 
 
 			zmq_msg_init(&id);
 			zmq_msg_init(&recv_frame);
 
-			int rc1 = zmq_msg_recv(&id, worker, 0);
-			int rc2 = zmq_msg_recv(&recv_frame, worker, 0);
-
+			/* 
+			* The ID will be freed after calling zmq_msg_send 
+			* If we want to send request to the guard again 
+			* we need to store a copy of the ID
+			*/
+			zmq_msg_recv(&id, worker, 0);
+			zmq_msg_recv(&recv_frame, worker, 0);
 			zmq_msg_copy(&cid, &id);
 
 			char *buf = (char *)zmq_msg_data(&recv_frame);
@@ -391,6 +414,10 @@ void *worker_routine(void *context)
 			switch (type) {
 				case TYPE_INIT: 
 				{
+					/* 
+					* Send ECC keys to the guard. We used to use ECC to sign every
+					* message but don't need it for now. Might bring this back later
+					*/
 					keys_t k_tmp  = gen_key_pair();
 					char *k_str = keys_to_str(k_tmp);
 					send_to_guard(worker, id, TYPE_KEY_DIST, ACTION_NOOP, k_str);
@@ -399,13 +426,12 @@ void *worker_routine(void *context)
 				}
 				case TYPE_POLICY:
 					{
-
+						/* Get the policy for the function and send it to the guard */
 						if (ACTION_POLICY_INIT == action) {
 
 							khiter_t k =  kh_get(policy_local_table, ptr_policy_local_table, recv_msg.body);
 							int is_missing = (k == kh_end(ptr_policy_local_table));
 							if (!is_missing){
-
 								char *policy = get_local_policy(recv_msg.body);
 								send_to_guard(worker, id, TYPE_POLICY, ACTION_POLICY_ADD, policy);
 							}
@@ -416,11 +442,10 @@ void *worker_routine(void *context)
 					}
 					break;
 
-				case TYPE_EVENT:
+				case TYPE_EVENT: /* Simply record the event and update state */
 					{	
 				
 						log_info("event %s", recv_msg.body);
-
 						char *info[9];
 						split_str(recv_msg.body, ":", info);
 						char event[EVENT_LEN+1] = {'\0'};
@@ -429,12 +454,13 @@ void *worker_routine(void *context)
 						unsigned ev_hash = djb2hash(info[0], info[1], info[2], info[3]);
 						int ev_id = get_event_id(ev_hash);					
 						check_policy(ev_id);
-
+						/* Send nothing, just as an ACK */
 						send_to_guard(worker, id, NULL, NULL, NULL);
 
 						free(recv_msg.body);
 
 #ifdef DEBUG
+						/* Showcase push-like requests */
 						if (strncmp(EVENT_END, event, EVENT_LEN) == 0) {
 							log_info("test: get guard state");
 							send_to_guard(worker, cid, TYPE_CHECK_STATUS, ACTION_CTR_REQ, "test");
@@ -448,6 +474,10 @@ void *worker_routine(void *context)
 				case TYPE_CHECK_EVENT:
 					{
 
+						/* 
+						* The guard doesn't know what to do and ask the ctr
+						* The ctr check its global policy and send the decision to the guard
+						*/
 						log_info("event %s", recv_msg.body);
 						char *info[9];
 						split_str(recv_msg.body, ":", info);
@@ -464,13 +494,13 @@ void *worker_routine(void *context)
 
 
 					}
-				/* example user commands */
+				/* Example user commands */
 				case TYPE_CHECK_STATUS:
 					switch (action) {
 
-						case ACTION_USER: /* from user */
-							/* send TYPE_CHECK_STATUS + ACTION_CTR_REQ to guard */
-						case ACTION_GD_RESP: /* from guard */
+						case ACTION_USER: /* From user */
+							/* Send TYPE_CHECK_STATUS + ACTION_CTR_REQ to guard */
+						case ACTION_GD_RESP: /* From guard */
 							log_info("get status info from guard %s", recv_msg.body);
 
 					}
@@ -497,8 +527,7 @@ int main(int argc, char const *argv[])
 {
 	log_set_level(LOG_INFO);
 	/* 
-	* The ctr needs a dummy or real policy (call graph), 
-	* use tools/gen_policy.py to create one 
+	* The ctr needs a dummy or real policy (call graph)
 	*/
 	int worker_no = 10;
 	char policy_name[64];
@@ -509,7 +538,9 @@ int main(int argc, char const *argv[])
 
 	void *context = zmq_ctx_new ();
 
-	/* Socket to talk to the guards and the user */
+	/* 
+	* Socket to talk to the guards and the user
+	*/
 	void *ctr = zmq_socket(context, ZMQ_ROUTER);	
 	sprintf(conn_str, "tcp://*:%d", CTR_PORT);
 	zmq_bind (ctr, conn_str);
@@ -529,7 +560,7 @@ int main(int argc, char const *argv[])
 		pthread_create(&worker, NULL, worker_routine, context);
 	}
 	
-	/*  Connect work threads to client threads via a queue proxy */
+	/* Connect work threads to client threads via a queue proxy */
 	zmq_proxy(ctr, workers, NULL);
 
 	/* We never get here, but clean up anyhow */

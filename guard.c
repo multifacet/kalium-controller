@@ -32,10 +32,10 @@ khash_t(policy_table) *ptr_policy_table = kh_init(policy_table);
 khash_t(event_mapping_table) *ptr_event_mapping_table = kh_init(event_mapping_table);
 
 
-static state_t guard_state;
+static state_t guard_state; /* Store the states of the guard */
 
-static int ior = 0;
-static int netr = 0;
+static int ior = 0; /* IO rate limits */
+static int netr = 0; /* Requests rate limits */
 
 static list_node *ptr_curr_state;
 static list_node *ptr_list_head;
@@ -83,7 +83,10 @@ void strip(char *str, char c)
 }
 
 
-
+/* 
+* Parse the crgoup file in AWS lambda instance to extract assigned instance ID
+* In non-AWS env the format of this file is different so we use "instid" instead
+*/
 void get_inst_id(char* inst_id)
 {
 
@@ -121,6 +124,18 @@ unsigned long get_time(void)
     return (unsigned long )1000000 * tv.tv_sec + tv.tv_usec;
 }
 
+unsigned long djb2hash(char *func_name, char *event, char *url, char *action)
+{	
+	int _len = strlen(func_name) + strlen(event) + strlen(url) + strlen(action) + 1;
+	char *hash_input = (char *)calloc(_len, sizeof(char));
+	snprintf(hash_input, _len, "%s%s%s%s", func_name, event, url, action);
+    unsigned long hash = 5381;
+    int c;
+    while (c = *hash_input++)
+        hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
+    return hash;
+}
+
 int get_event_id(unsigned long event_hash)
 {
 	khiter_t idx;
@@ -133,17 +148,7 @@ int get_event_id(unsigned long event_hash)
 	return eid;
 }
 
-unsigned long djb2hash(char *func_name, char *event, char *url, char *action)
-{	
-	int _len = strlen(func_name) + strlen(event) + strlen(url) + strlen(action) + 1;
-	char *hash_input = (char *)calloc(_len, sizeof(char));
-	snprintf(hash_input, _len, "%s%s%s%s", func_name, event, url, action);
-    unsigned long hash = 5381;
-    int c;
-    while (c = *hash_input++)
-        hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
-    return hash;
-}
+
 
 void my_free(void *data, void *hint)
 {
@@ -159,6 +164,7 @@ void state_init()
 
 }
 
+/* Example for showing how to check whitelists */
 int lookup(const int h_name, char *key)
 {	
 
@@ -189,6 +195,7 @@ int lookup(const int h_name, char *key)
 	return !is_missing;
 }
 
+
 void key_init_req(void *socket, char *guard_id)
 {
 
@@ -204,7 +211,7 @@ void key_init_req(void *socket, char *guard_id)
 
 void key_init_handler(char* msg_body, int msg_body_len)
 {
-	/* handle key here */
+	/* Handle key here */
 	return;
 }
 
@@ -218,7 +225,7 @@ void send_to_ctr(void *socket, char msg_type, char action, char *data)
 	zmq_msg_close(&msg);
 }
 
-/* Send a message to the client */
+/* Send a message to the runtime */
 void send_to_client(void *socket, char *data)
 {
 
@@ -336,11 +343,7 @@ void policy_init_handler(char *msg_body, int msg_body_len)
 	ptr_curr_state = graph;
 	ptr_list_head = graph;
 
-
-	
-
 }
-
 
 
 
@@ -410,19 +413,20 @@ int main(int argc, char const *argv[])
 
 	state_init();
 	void *context = zmq_ctx_new();
-	void *updater = zmq_socket(context, ZMQ_DEALER);
-	void *listener = zmq_socket(context, ZMQ_REP);
-	// void *backend = zmq_socket(context, ZMQ_ROUTER);
+	void *updater = zmq_socket(context, ZMQ_DEALER); /* Socket for get messages from the ctr */
+	void *listener = zmq_socket(context, ZMQ_REP); /* Socket for get messages from the runtime */
+	/* Socket for monitoring disk activity. Don't need it anymore */
+	// void *backend = zmq_socket(context, ZMQ_ROUTER); 
 
 	char conn_str[100];
 	char identity [128];
-	char *guard_id = get_func_name();
+	char *guard_id = get_func_name(); /* Function name */
 
 	memset(identity, '\0', sizeof(identity));
 	sprintf(identity, "%s%ld", guard_id, get_time());
 	strip(identity, '-');
 
-	char rid[16];
+	char rid[16]; /* Lambda instance ID */
 	memset(rid, '\0', sizeof(rid));
 	get_inst_id(rid);
 
@@ -475,7 +479,7 @@ int main(int argc, char const *argv[])
 				case TYPE_KEY_DIST:
 				{
 					key_init_handler(recv_msg.body, strtol(recv_msg.header.len, NULL, 16));
-					/* ask for policy*/
+					/* Ask for policy*/
 					send_to_ctr(updater, TYPE_POLICY, ACTION_POLICY_INIT, guard_id);
 					break;
 
@@ -499,6 +503,7 @@ int main(int argc, char const *argv[])
 				}
 				case TYPE_CHECK_STATUS:
 				{
+					
 					log_info("send status to ctr");
 					guard_state.running_time = get_time() - guard_state.start_time;
 					int a = snprintf(NULL, 0, "%d", guard_state.request_no);
@@ -557,15 +562,12 @@ int main(int argc, char const *argv[])
     			log_error("message is not an valid json object!");
     			char error_info[] = "no object";
     			send_to_client(listener, error_info);
-				// zmq_msg_init_data(&resp, error_info, strlen(error_info) , NULL, NULL);
     			
  			}
  			else if (!d.HasMember("meta")){
  				log_error("message does not has the meta field!");
  				char error_info[] = "no meta";
  				send_to_client(listener, error_info);
-				// zmq_msg_init_data (&resp, error_info, strlen(error_info) , NULL, NULL);
-
  			}	
 
     		else {

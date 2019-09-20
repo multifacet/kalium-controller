@@ -109,7 +109,7 @@ int list_insert(list *L, int pos, void *e)
   	if (!p) {
   		return ERROR;
   	}	
-  	tnode = (list*)malloc(sizeof(list_node));
+  	tnode = (list *)malloc(sizeof(list_node));
   	
     if (!tnode) {
   		return MEMORYFAIL;
@@ -127,7 +127,7 @@ int list_append(list *L, void* e)
 { 
   	list *p, *tnode;
   	p = L->prev;	
-  	tnode = (list*)malloc(sizeof(list_node));
+  	tnode = (list *)malloc(sizeof(list_node));
   	
     if (!tnode) {
   		return MEMORYFAIL;
