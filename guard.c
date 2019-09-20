@@ -396,11 +396,9 @@ bool check_policy(int event_id){
 		if ((next_d_ptr->ctr > 0) && (next_d_ptr->id == event_id)) {
 			next_d_ptr->ctr -= 1;
 			ptr_curr_state = next_ptr;
-			
 			return true;
 		}
 	}
-
 	return false;
 }
 
@@ -501,7 +499,7 @@ int main(int argc, char const *argv[])
 					break;
 
 				}
-				case TYPE_CHECK_STATUS:
+				case TYPE_CHECK_STATUS: /* Showcase asking the ctr for decision */
 				{
 
 					log_info("send status to ctr");
