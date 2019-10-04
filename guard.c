@@ -226,11 +226,12 @@ void send_to_ctr(void *socket, char msg_type, char action, char *data)
 }
 
 /* Send a message to the runtime */
-void send_to_client(void *socket, char *data)
+void send_to_client(void *socket, zmq_msg_t id, char *data)
 {
 
 	zmq_msg_t msg; 
 	zmq_msg_init_data(&msg, data, strlen(data), NULL, NULL);
+	zmq_msg_send(&id, socket, ZMQ_SNDMORE);
 	zmq_msg_send(&msg, socket, 0); 
 	zmq_msg_close(&msg);
 }
@@ -412,7 +413,7 @@ int main(int argc, char const *argv[])
 	state_init();
 	void *context = zmq_ctx_new();
 	void *updater = zmq_socket(context, ZMQ_DEALER); /* Socket for get messages from the ctr */
-	void *listener = zmq_socket(context, ZMQ_REP); /* Socket for get messages from the runtime */
+	void *listener = zmq_socket(context, ZMQ_STREAM); /* Socket for get messages from the runtime */
 	/* Socket for monitoring disk activity. Don't need it anymore */
 	// void *backend = zmq_socket(context, ZMQ_ROUTER); 
 
@@ -452,7 +453,7 @@ int main(int argc, char const *argv[])
 	key_init_req(updater, guard_id);
 
 	log_info("register to ctr");
-
+	zmq_msg_t cid;
 
 	while (1) {
 		zmq_poll (items, 2, -1);
@@ -471,6 +472,8 @@ int main(int argc, char const *argv[])
 			msg_t recv_msg = msg_parser((char *)zmq_msg_data(&buf));
 			char type = recv_msg.header.type;
 			char action = recv_msg.header.action;
+			
+
 
 			switch (type) {
 
@@ -495,7 +498,7 @@ int main(int argc, char const *argv[])
 				case TYPE_CHECK_RESP:
 				{
 					log_info("get check resp %s", recv_msg.body);
-					send_to_client(listener, recv_msg.body);
+					send_to_client(listener, cid, recv_msg.body);
 					break;
 
 				}
@@ -523,6 +526,7 @@ int main(int argc, char const *argv[])
 			
 			guard_state.request_no += 1;
 
+			
 			zmq_msg_t buf;
 			int msg_size;
 
@@ -532,9 +536,12 @@ int main(int argc, char const *argv[])
 			* Meta: URL + method + IP + port + if event has data + unique ID
 			* Data: Data in the event 
 			*/ 
-
+			zmq_msg_init(&cid);
 			zmq_msg_init(&buf);
+
+			zmq_msg_recv(&cid, listener, 0);
 			zmq_msg_recv(&buf, listener, 0);
+
 			msg_size = zmq_msg_size(&buf);
 
 			if (msg_size <= 1) continue;
@@ -552,7 +559,7 @@ int main(int argc, char const *argv[])
 
     		if (strncmp(EVENT_CHECK, event, EVENT_LEN) == 0) {
     			
-				send_to_client(listener, guard_id);
+				send_to_client(listener, cid, guard_id);
 				send_to_ctr(updater, TYPE_CHECK_STATUS, ACTION_NOOP, guard_id);
 				
 				continue;	
@@ -561,13 +568,13 @@ int main(int argc, char const *argv[])
     		if (!d.IsObject()) {
     			log_error("message is not an valid json object!");
     			char error_info[] = "no object";
-    			send_to_client(listener, error_info);
+    			send_to_client(listener, cid, error_info);
     			
  			}
  			else if (!d.HasMember("meta")){
  				log_error("message does not has the meta field!");
  				char error_info[] = "no meta";
- 				send_to_client(listener, error_info);
+ 				send_to_client(listener, cid, error_info);
  			}	
 
     		else {
@@ -605,7 +612,7 @@ int main(int argc, char const *argv[])
 
 				else if (strncmp(EVENT_END, event, EVENT_LEN) == 0) {
 					policy_init();
-					send_to_client(listener, (char *)EMPTY);
+					send_to_client(listener, cid, (char *)EMPTY);
 					send_to_ctr(updater, TYPE_EVENT, ACTION_NOOP, out);
 					
 				}
@@ -617,12 +624,12 @@ int main(int argc, char const *argv[])
 					if (check_policy(ev_id)) {
 						
 						char dec[] = "ALLOW"; 
-						send_to_client(listener, dec);
+						send_to_client(listener, cid, dec);
 						send_to_ctr(updater, TYPE_EVENT, ACTION_NOOP, out); 
 					}
 					else {
 						char dec[] = "DENY";
-						send_to_client(listener, dec);
+						send_to_client(listener, cid, dec);
 						send_to_ctr(updater, TYPE_EVENT, ACTION_NOOP, out); 
 					}
 					

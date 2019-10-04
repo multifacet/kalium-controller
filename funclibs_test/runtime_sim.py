@@ -20,10 +20,15 @@ zmq_context = zmq.Context()
 
 def send_event(event_name, data):
 
-    sk = zmq_context.socket(zmq.REQ)
-    sk.connect("tcp://%s:%s" % (GUARD_IP, GUARD_PORT))
+    # sk = zmq_context.socket(zmq.REQ)
+    # sk.connect("tcp://%s:%s" % (GUARD_IP, GUARD_PORT))
+    # sk.send("%s:%s" % (event_name, data))
+
+    sk = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sk.connect((GUARD_IP, GUARD_PORT))
     sk.send("%s:%s" % (event_name, data))
-    resp = sk.recv()
+
+    resp = sk.recv(1024)
     return resp
 
 
