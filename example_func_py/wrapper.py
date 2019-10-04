@@ -25,9 +25,6 @@ import errno
 
 import threading
 
-import zmq
-
-zmq_context = zmq.Context()
 
 
 def remove_tag(event):
@@ -50,9 +47,12 @@ def lambda_handler(event, context):
 	print os.environ['PATH']
 	r = os.popen("ps aux").read()
 	if "./guard" not in r:
-		print "start new guard"
-		proc = subprocess.Popen(["./guard"], stderr=subprocess.PIPE)
-		time.sleep(1)
+		try:
+			print "start new guard"
+			proc = subprocess.Popen(["./guard"], stderr=subprocess.PIPE)
+			time.sleep(1)
+		except:
+			pass
 	event = {"test": "hello"}
 	res = func.main(event, context)
 

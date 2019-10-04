@@ -4,11 +4,8 @@ import subprocess
 import json
 import time
 import boto3
-import zmq
 import socket
 from conf import *
-
-zmq_context = zmq.Context()
 
 def send_event(event_name, data):
 

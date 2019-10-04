@@ -87,7 +87,6 @@ ALERT_DESCRIPTION_BAD_CERTIFICATE_HASH_VALUE
 ALERT_DESCRIPTION_UNKNOWN_PSK_IDENTITY
 """
 import json
-import zmq
 import textwrap
 import re
 import sys
@@ -183,7 +182,7 @@ _RESTRICTED_SERVER_CIPHERS = (
 	'!eNULL:!MD5:!DSS:!RC4'
 )
 
-zmq_context = zmq.Context()
+
 
 class CertificateError(ValueError):
 	pass
