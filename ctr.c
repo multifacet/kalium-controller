@@ -406,6 +406,8 @@ void *worker_routine(void *context)
 			zmq_msg_copy(&cid, &id);
 
 			char *buf = (char *)zmq_msg_data(&recv_frame);
+			log_info("Received Message");
+			log_info("Content: %s", buf);
 
 			msg_t recv_msg = msg_parser(buf);
 			char type = recv_msg.header.type;
@@ -422,7 +424,8 @@ void *worker_routine(void *context)
 					char *k_str = keys_to_str(k_tmp);
 					send_to_guard(worker, id, TYPE_KEY_DIST, ACTION_NOOP, k_str);
 					log_info("guard registration");
-					break;
+					
+break;
 				}
 				case TYPE_POLICY:
 					{
@@ -533,6 +536,9 @@ int main(int argc, char const *argv[])
 	int worker_no = 10;
 	char policy_name[64];
 	char conn_str[100];
+	memset(policy_name, 0, 64 * sizeof(char));
+	memset(conn_str, 0, 100 * sizeof(char));
+
 	strncpy(policy_name, argv[1], strlen(argv[1]));
 	init_comm_graph(policy_name);
 	log_info("init policy %s; local graphs for %d funcs", policy_name, kh_size(ptr_policy_local_table));
