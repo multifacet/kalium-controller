@@ -436,6 +436,7 @@ break;
 							int is_missing = (k == kh_end(ptr_policy_local_table));
 							if (!is_missing){
 								char *policy = get_local_policy(recv_msg.body);
+								log_info("found policy for %s", recv_msg.body);
 								send_to_guard(worker, id, TYPE_POLICY, ACTION_POLICY_ADD, policy);
 							}
 							else {
