@@ -429,7 +429,7 @@ int main(int argc, char const *argv[])
 	memset(rid, '\0', sizeof(rid));
 	get_inst_id(rid);
 
-
+	log_info("Inst id: %s", rid);
 	zmq_setsockopt(updater, ZMQ_IDENTITY, identity, sizeof(identity));
 	sprintf(conn_str, "tcp://%s:%d", CTR_IP, CTR_PORT);
   	log_info("connect to ctr: %s", conn_str);

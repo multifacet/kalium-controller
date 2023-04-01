@@ -425,13 +425,13 @@ void *worker_routine(void *context)
 					send_to_guard(worker, id, TYPE_KEY_DIST, ACTION_NOOP, k_str);
 					log_info("guard registration");
 					
-break;
+					break;
 				}
 				case TYPE_POLICY:
 					{
 						/* Get the policy for the function and send it to the guard */
 						if (ACTION_POLICY_INIT == action) {
-
+							char *null_policy = "NULL";
 							khiter_t k =  kh_get(policy_local_table, ptr_policy_local_table, recv_msg.body);
 							int is_missing = (k == kh_end(ptr_policy_local_table));
 							if (!is_missing){
@@ -441,6 +441,7 @@ break;
 							}
 							else {
 								log_error("cannot find policy");
+								send_to_guard(worker, id, TYPE_POLICY, ACTION_NOOP, null_policy);
 							}
 						}					
 					}
@@ -450,14 +451,14 @@ break;
 					{	
 				
 						log_info("event %s", recv_msg.body);
-						char *info[9];
-						split_str(recv_msg.body, ":", info);
-						char event[EVENT_LEN+1] = {'\0'};
-						strncpy(event, info[1], EVENT_LEN);
+						//char *info[9];
+						//split_str(recv_msg.body, ":", info);
+						//char event[EVENT_LEN+1] = {'\0'};
+						//strncpy(event, info[1], EVENT_LEN);
 
-						unsigned ev_hash = djb2hash(info[0], info[1], info[2], info[3]);
-						int ev_id = get_event_id(ev_hash);					
-						check_policy(ev_id);
+						//unsigned ev_hash = djb2hash(info[0], info[1], info[2], info[3]);
+						//int ev_id = get_event_id(ev_hash);					
+						//check_policy(ev_id);
 						/* Send nothing, just as an ACK */
 						send_to_guard(worker, id, NULL, NULL, NULL);
 
@@ -465,12 +466,12 @@ break;
 
 #ifdef DEBUG
 						/* Showcase push-like requests */
-						if (strncmp(EVENT_END, event, EVENT_LEN) == 0) {
+						/*if (strncmp(EVENT_END, event, EVENT_LEN) == 0) {
 							log_info("test: get guard state");
 							policy_init();
 							send_to_guard(worker, cid, TYPE_CHECK_STATUS, ACTION_CTR_REQ, (char *)"test");
 
-						}
+						}*/
 
 #endif
 						continue;
@@ -534,7 +535,7 @@ int main(int argc, char const *argv[])
 	/* 
 	* The ctr needs a dummy or real policy (call graph)
 	*/
-	int worker_no = 10;
+	int worker_no = 140;
 	char policy_name[64];
 	char conn_str[100];
 	memset(policy_name, 0, 64 * sizeof(char));
